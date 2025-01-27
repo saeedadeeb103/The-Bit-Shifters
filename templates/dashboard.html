@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Sidebar Example</title>
+  <link
+    rel="stylesheet"
+    href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+  />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pako@2.0.4/dist/pako.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+
+  <style>
+    /* GLOBAL STYLES */
+    /* GLOBAL STYLES */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: sans-serif;
+      background-color: #f8f6f5;
+    }
+
+    /* ======================
+    COLLAPSIBLE SIDEBAR
+    ====================== */
+    /* Sidebar base styles */
+    .sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 70px; /* Collapsed width */
+      background-color: #2f4368;
+      overflow: hidden; /* Hide overflow when collapsed */
+      z-index: 9999;
+      transition: width 0.3s ease-in-out; /* Smooth width transition */
+      will-change: width; /* Optimize for performance */
+    }
+
+    /* Gold strip on the right edge of the sidebar */
+    .sidebar::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 10px;
+      height: 100%;
+      background-color: #fdb814; /* gold strip */
+    }
+
+    /* The gold sliding panel (hidden when collapsed) */
+    .nav-panel {
+      position: absolute;
+      top: 0;
+      left: 70px; /* Touches the navy bar's right edge */
+      width: 270px; /* Expanded width */
+      height: 100vh;
+      background-color: #fdb814; /* gold background */
+      overflow-y: auto;
+      padding: 20px; /* Padding for content */
+      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+      transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out; /* Smooth fade effect */
+      will-change: opacity, visibility; /* Optimize for performance */
+    }
+
+    /* Hide the nav-panel when sidebar is collapsed */
+    .sidebar:not(.expanded) .nav-panel {
+      opacity: 0; /* Fade out */
+      visibility: hidden; /* Hide completely */
+    }
+
+    /* Show the nav-panel when sidebar is expanded */
+    .sidebar.expanded .nav-panel {
+      opacity: 1; /* Fade in */
+      visibility: visible; /* Show */
+    }
+
+    /* The hamburger toggle */
+    .toggle-btn {
+      font-size: 30px;
+      color: #fff;
+      background: none;
+      border: none;
+      cursor: pointer;
+      margin: 15px;
+      transition: transform 0.3s ease-in-out; /* Smooth rotation */
+    }
+
+    /* Rotate the hamburger icon when expanded */
+    .sidebar.expanded .toggle-btn {
+      transform: rotate(90deg);
+    }
+
+    /* "PAGE NAVIGATION" heading inside gold panel */
+    .nav-panel h3 {
+      color: #2f4368; /* navy blue text */
+      margin: 0 0 20px 0; /* top margin 0, bottom margin 20px */
+      font-weight: bold;
+      text-transform: uppercase; /* uppercase text */
+      font-size: 18px;
+    }
+
+    /* The UL with your link items */
+    .nav-links {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      margin-top: 30px;
+    }
+
+    /* Each link item */
+    .nav-links li {
+      background-color: #2f4368; /* navy blue background */
+      color: #fff; /* white text */
+      font-weight: bold;
+      padding: 10px 15px;
+      margin-bottom: 10px;
+      margin-left: -20px;
+      border-radius: 0 20px 20px 0; /* more rounded corners for pill shape */
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    .nav-links li:hover {
+      background-color: #1a2a4a; /* darker navy on hover */
+    }
+
+    /* Icons at bottom of the navy bar */
+    .sidebar-icons {
+      position: absolute;
+      bottom: 20px;
+      left: 0;
+      width: 70px; /* match .sidebar width */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Circle icons */
+    .icon-circle {
+      width: 35px;
+      height: 35px;
+      border: 1px solid #fff;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 35px;
+      color: #fff;
+      cursor: pointer;
+      margin-right: 10px;
+      transition: background-color 0.3s ease;
+    }
+
+    .icon-circle:hover {
+      background-color: rgba(255, 255, 255, 0.1); /* subtle hover effect */
+    }
+
+    /* Expand the entire sidebar when expanded */
+    .sidebar.expanded {
+      width: 340px; /* 70px (navy) + 270px (gold panel) */
+      z-index: 10001; /* Ensure it's above the main content */
+    }
+
+    /* MAIN CONTENT SHIFT */
+    .main-content {
+      margin-left: 70px; /* collapsed width */
+      padding: 20px;
+      transition: margin-left 0.3s ease-in-out; /* Smooth transition */
+      will-change: margin-left; /* Optimize for performance */
+    }
+
+    /* Shift main content when sidebar is expanded */
+    .sidebar.expanded ~ .main-content {
+      margin-left: 70px; /* Keep the same margin as collapsed state */
+    }
+
+    /* Collapse arrow button */
+    .collapse-arrow {
+      display: none;
+      position: fixed;
+      top: 20px;
+      left: 335px; /* Initial position when sidebar is expanded */
+      width: 50px;
+      height: 40px;
+      background-color: #fdb814;
+      color: #2f4368;
+      font-size: 20px;
+      border: none;
+      cursor: pointer;
+      border-radius: 0 20px 20px 0;
+      box-shadow: 1px 0 0px rgba(0, 0, 0, 0.1);
+      z-index: 10000;
+      transition: left 0.7s ease-in-out; /* Smooth transition for the arrow */
+    }
+
+    /* Show the arrow when sidebar is expanded */
+    #mySidebar.expanded ~ .collapse-arrow {
+      display: block;
+    }
+
+    /* Adjust the arrow position when sidebar is collapsed */
+    #mySidebar:not(.expanded) ~ .collapse-arrow {
+      left: 70px; /* Position when sidebar is collapsed */
+    }
+
+    /* KPI CARD STYLES */
+    .kpi-card {
+      background-color: #ffffff;
+      border: 1px solid #cfd5da;
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      margin-top: -20px;
+    }
+
+    .kpi-card .card-value {
+      font-size: 24px;
+      font-weight: bold;
+      color: #007bff;
+    }
+
+    .card {
+      background-color: #ffffff;
+      border: none;
+      border-radius: 10px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+    }
+
+    .card-body {
+      padding: 20px;
+    }
+
+    .chart-container {
+      height: 300px;
+      position: relative;
+    }
+
+    .container-fluid {
+      margin-top: 20px;
+      padding-left: 100px;
+      padding-right: 100px;
+    }
+
+    .card-title {
+      text-align: center;
+      margin-bottom: 15px;
+    }
+
+    .no-data-msg {
+      margin-top: 50px;
+    }
+  </style>
+</head>
+<body>
+  <!-- SIDEBAR (NAVY) -->
+  <div class="sidebar" id="mySidebar">
+    <!-- Hamburger icon (top) -->
+    <button class="toggle-btn" onclick="toggleSidebar()">&#9776;</button>
+  
+    <!-- The gold sliding panel (hidden when collapsed) -->
+    <div class="nav-panel">
+      <h3 style="margin-top: 30px;">PAGE NAVIGATION</h3>
+      <ul class="nav-links">
+        <li>Provider Dashboard</li>
+        <li>Customer Dashboard</li>
+      </ul>
+    </div>
+    
+    <!-- Icons at bottom of navy bar -->
+    <div class="sidebar-icons">
+      <div class="icon-circle">i</div>
+      <div class="icon-circle">?</div>
+    </div>
+  </div>
+  
+  <!-- Collapse arrow button -->
+  <button class="collapse-arrow" onclick="toggleSidebar()">&larr;</button>
+
+  <!-- MAIN CONTENT -->
+  <div class="main-content">
+    <div class="container-fluid">
+      <div class="row mb-4">
+        <div class="col-12">
+          <h1 class="text-center my-4">Customer Dashboard (Last 3 Days)</h1>
+        </div>
+      </div>
+
+      <!-- FILTERS -->
+      <div class="row mb-4">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Filters</h5>
+              <div class="row justify-content-center">
+                <!-- User ID Dropdown -->
+                <div class="col-md-3 mb-3">
+                  <select class="form-control" id="userIdFilter" title="Filter by User ID">
+                    <option value="">Select User ID</option>
+                    <!-- Options populated dynamically -->
+                  </select>
+                </div>
+                <!-- Query Type Dropdown -->
+                <div class="col-md-3 mb-3">
+                  <select class="form-control" id="queryTypeFilter" title="Filter by Query Type">
+                    <option value="">Select Query Type</option>
+                    <!-- Options populated dynamically -->
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI CARDS -->
+      <div class="row">
+        <div class="col-md-4">
+          <div class="card kpi-card">
+            <div class="card-body">
+              <h5 class="card-title">Total Queries</h5>
+              <p class="card-value" id="totalQueries">0</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card kpi-card">
+            <div class="card-body">
+              <h5 class="card-title">Stable Queries</h5>
+              <p class="card-value" id="stableQueries">0</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card kpi-card">
+            <div class="card-body">
+              <h5 class="card-title">Aborted Queries</h5>
+              <p class="card-value" id="abortedQueries">0</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHARTS -->
+      <div class="row">
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Query Execution Time</h5>
+              <div class="chart-container">
+                <canvas id="executionTimeChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Stable Query Performance</h5>
+              <div class="chart-container">
+                <canvas id="stableQueryPerformanceChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Query Throughput</h5>
+              <div class="chart-container">
+                <canvas id="queryThroughputChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Query Failures</h5>
+              <div class="chart-container">
+                <canvas id="queryFailuresChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div> <!-- end container-fluid -->
+  </div>   <!-- end main-content -->
+
+  <!-- SIDEBAR TOGGLE SCRIPT -->
+  <script>
+    // Global chart instances
+    const worker = new Worker("{{ url_for('static', filename='js/worker.js') }}");
+
+    // Global chart instances
+    let executionTimeChartInstance = null;
+    let stableQueryPerformanceChartInstance = null;
+    let queryThroughputChartInstance = null;
+    let queryFailuresChartInstance = null;
+
+    // Store the original CSV data globally
+    let originalData = [];
+
+    // Toggle sidebar
+    let sidebarToggleTimeout;
+    function toggleSidebar() {
+      clearTimeout(sidebarToggleTimeout);
+      const sidebar = document.getElementById("mySidebar");
+      
+      // Use timeout to let the animation complete
+      sidebarToggleTimeout = setTimeout(() => {
+        sidebar.classList.toggle("expanded");
+      }, 50); // Debounce to reduce rapid reflows
+    }
+
+    // Debounced updateDashboard function
+    let debounceTimeout;
+    function updateDashboard() {
+      clearTimeout(debounceTimeout);
+      debounceTimeout = setTimeout(() => {
+        const selectedUserId = document.getElementById('userIdFilter').value;
+        const selectedQueryType = document.getElementById('queryTypeFilter').value;
+
+        worker.postMessage({
+          data: originalData,
+          filters: { userId: selectedUserId, queryType: selectedQueryType },
+        });
+      }, 300);
+    }
+
+    // Fetch data and initialize dashboard
+    document.addEventListener('DOMContentLoaded', async function () {
+      try {
+        // Add event listeners to filters
+        const filters = document.querySelectorAll('#userIdFilter, #queryTypeFilter');
+        filters.forEach(filter => {
+          filter.addEventListener('change', updateDashboard);
+        });
+
+        // Fetch data once at the start
+        await fetchDataAndUpdateDashboard();
+      } catch (error) {
+        console.error("Error initializing dashboard:", error);
+      }
+    });
+
+    // Fetch data from the backend
+    async function fetchDataAndUpdateDashboard() {
+      try {
+        const response = await fetch('/api/data');
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+        const buffer = await response.arrayBuffer();
+        const decompressedData = pako.inflate(new Uint8Array(buffer), { to: 'string' });
+        const parsedData = Papa.parse(decompressedData, { header: true }).data;
+
+        originalData = parsedData;
+
+        // Populate filter dropdowns
+        populateUserIdDropdown(parsedData);
+        populateQueryTypeDropdown(parsedData);
+
+        // Update the dashboard with the parsed data
+        updateDashboard();
+      } catch (error) {
+        console.error('Error fetching and processing data:', error);
+      }
+    }
+
+    // Populate user_id dropdown
+    function populateUserIdDropdown(data) {
+      const userIdDropdown = document.getElementById('userIdFilter');
+      const userIds = [...new Set(data.map(item => item.user_id))].sort();
+      userIdDropdown.innerHTML = '<option value="">Select User ID</option>';
+      userIds.forEach(uid => {
+        const option = document.createElement('option');
+        option.value = uid;
+        option.textContent = uid;
+        userIdDropdown.appendChild(option);
+      });
+    }
+
+    // Populate query_type dropdown
+    function populateQueryTypeDropdown(data) {
+      const queryTypeDropdown = document.getElementById('queryTypeFilter');
+      const queryTypes = [...new Set(data.map(item => item.query_type))].sort();
+      queryTypeDropdown.innerHTML = '<option value="">Select Query Type</option>';
+      queryTypes.forEach(qt => {
+        const option = document.createElement('option');
+        option.value = qt;
+        option.textContent = qt;
+        queryTypeDropdown.appendChild(option);
+      });
+    }
+
+    // Web Worker message handler
+    worker.onmessage = function (event) {
+      const { kpis, executionTimeData, stableQueryData, throughputData, failuresData } = event.data;
+
+      // Update KPI cards
+      document.getElementById('totalQueries').textContent = kpis.totalQueries;
+      document.getElementById('stableQueries').textContent = kpis.stableQueries;
+      document.getElementById('abortedQueries').textContent = kpis.abortedQueries;
+
+      // Update charts
+      updateExecutionTimeChart(executionTimeData);
+      updateStableQueryPerformanceChart(stableQueryData);
+      updateQueryThroughputChart(throughputData);
+      updateQueryFailuresChart(failuresData);
+    };
+
+    // ====================
+    // 1) Update the KPIs
+    // ====================
+    function updateKPIs(data) {
+      if (!data || data.length === 0) {
+        document.getElementById('totalQueries').textContent = "N/A";
+        document.getElementById('stableQueries').textContent = "N/A";
+        document.getElementById('abortedQueries').textContent = "N/A";
+        return;
+      }
+
+      const totalQueries = data.reduce((sum, item) => sum + (parseInt(item.query_count) || 0), 0);
+      const stableQueries = data.filter(item => item.short_fingerprint !== 'Unknown').length;
+      const abortedQueries = data.reduce((sum, item) => {
+        const failCount = parseInt(item.failure_count, 10);
+        return sum + (isNaN(failCount) ? 0 : failCount);
+      }, 0);
+
+      document.getElementById('totalQueries').textContent = totalQueries;
+      document.getElementById('stableQueries').textContent = stableQueries;
+      document.getElementById('abortedQueries').textContent = abortedQueries;
+    }
+
+    // =====================================
+    // 2) Update Execution Time Chart (Bar)
+    // =====================================
+    // Helper: Remove any existing "no data" message in a container
+    function hideNoDataMessage(container) {
+      const msg = container.querySelector('.no-data-msg');
+      if (msg) container.removeChild(msg);
+    }
+    function showNoDataMessage(container, message) {
+      hideNoDataMessage(container); // Clear any existing message
+      const msgElem = document.createElement('p');
+      msgElem.classList.add('text-center', 'text-muted', 'no-data-msg');
+      msgElem.textContent = message;
+      container.appendChild(msgElem);
+    }
+
+    function updateExecutionTimeChart(data) {
+      const canvas = document.getElementById('executionTimeChart');
+      const container = canvas.parentElement; // chart-container
+      const ctx = canvas.getContext('2d');
+
+      // Destroy old instance if exists
+      if (executionTimeChartInstance) {
+        executionTimeChartInstance.destroy();
+      }
+
+      // Filter out any invalid data
+      const validData = data.filter(item =>
+        item.short_fingerprint !== 'Unknown' &&
+        !isNaN(parseFloat(item.avg_execution_time)) &&
+        item.arrival_timestamp
+      );
+
+      if (validData.length === 0) {
+        showNoDataMessage(container, "No data available for Execution Time");
+        canvas.style.display = 'none';
+        return;
+      } else {
+        hideNoDataMessage(container);
+        canvas.style.display = 'block';
+      }
+
+      // Group by day and calculate average
+      const dailyData = validData.reduce((acc, item) => {
+        const dateStr = new Date(item.arrival_timestamp).toISOString().split('T')[0]; // YYYY-MM-DD
+        if (!acc[dateStr]) acc[dateStr] = { total: 0, count: 0 };
+        acc[dateStr].total += parseFloat(item.avg_execution_time);
+        acc[dateStr].count += 1;
+        return acc;
+      }, {});
+
+      const labels = Object.keys(dailyData).sort();
+      const avgTimes = labels.map(date => {
+        const obj = dailyData[date];
+        return (obj.total / obj.count).toFixed(2);
+      });
+
+      executionTimeChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Avg Execution Time (ms)',
+            data: avgTimes,
+            backgroundColor: '#007bff',
+            fill: false
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: 'Execution Time (ms)'
+              }
+            },
+            x: {
+              title: {
+                display: true,
+                text: 'Day'
+              }
+            }
+          }
+        }
+      });
+    }
+
+
+
+    // ==========================================
+    // 3) Update Stable Query Performance (Bar)
+    // ==========================================
+    function updateStableQueryPerformanceChart(data) {
+      // Validate the data structure
+      if (!data || !Array.isArray(data.labels) || !Array.isArray(data.executionTimes)) {
+          console.error("Invalid data format for Stable Query Performance:", data);
+          return;
+      }
+
+      const canvas = document.getElementById('stableQueryPerformanceChart');
+      const container = canvas.parentElement;
+      const ctx = canvas.getContext('2d');
+
+      // Destroy old instance if it exists
+      if (stableQueryPerformanceChartInstance) {
+          stableQueryPerformanceChartInstance.destroy();
+      }
+
+      // Check if there's valid data
+      if (data.labels.length === 0 || data.executionTimes.length === 0) {
+          showNoDataMessage(container, "No data available for Stable Query Performance");
+          canvas.style.display = 'none';
+          return;
+      } else {
+          hideNoDataMessage(container);
+          canvas.style.display = 'block';
+      }
+
+      // Ensure executionTimes are numbers
+      const executionTimes = data.executionTimes.map(Number);
+
+      // Calculate the minimum and maximum values for the y-axis
+      const minValue = Math.min(...executionTimes);
+      const maxValue = Math.max(...executionTimes);
+
+      // Use `labels` and `executionTimes` directly from `data`
+      stableQueryPerformanceChartInstance = new Chart(ctx, {
+          type: 'line', // Change to 'line' for a line chart
+          data: {
+              labels: data.labels, // x-axis labels
+              datasets: [{
+                  label: 'Avg Execution Time (ms)',
+                  data: executionTimes, // y-axis data
+                  borderColor: '#28a745', // Line color
+                  backgroundColor: 'rgba(40, 167, 69, 0.2)', // Fill color under the line
+                  fill: true, // Fill the area under the line
+                  tension: 0.4, // Smooth the line
+              }]
+          },
+          options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                  y: {
+                      beginAtZero: false, // Do not force the y-axis to start at zero
+                      suggestedMin: minValue > 0 ? minValue * 0.9 : 0, // Add padding for small values
+                      suggestedMax: maxValue * 1.1, // Add padding for large values
+                      title: {
+                          display: true,
+                          text: 'Execution Time (ms)'
+                      }
+                  },
+                  x: {
+                      title: {
+                          display: true,
+                          text: 'Short Fingerprint'
+                      }
+                  }
+              },
+              plugins: {
+                  tooltip: {
+                      enabled: true, // Enable tooltips for better data visibility
+                  }
+              }
+          }
+      });
+  }
+
+
+
+    // ==================================
+    // 4) Update Query Throughput (Line)
+    // ==================================
+    function updateQueryThroughputChart(data) {
+      const canvas = document.getElementById('queryThroughputChart');
+      const container = canvas.parentElement;
+      const ctx = canvas.getContext('2d');
+
+      if (queryThroughputChartInstance) {
+        queryThroughputChartInstance.destroy();
+      }
+
+      // Use `labels` and `throughput` directly from `data`
+      const { labels, throughput } = data;
+
+      if (!Array.isArray(labels) || !Array.isArray(throughput) || labels.length === 0 || throughput.length === 0) {
+        showNoDataMessage(container, "No data available for Query Throughput");
+        canvas.style.display = 'none';
+        return;
+      }
+
+      hideNoDataMessage(container);
+      canvas.style.display = 'block';
+
+      queryThroughputChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels, // x-axis labels
+          datasets: [{
+            label: 'Queries per Hour',
+            data: throughput, // y-axis data
+            borderColor: '#ffc107',
+            fill: false
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: 'Queries per Hour'
+              }
+            },
+            x: {
+              title: {
+                display: true,
+                text: 'Time (Hour)'
+              }
+            }
+          }
+        }
+      });
+    }
+
+
+    // Helper: compute throughput by hour
+    function calculateQueryThroughput(data) {
+      console.log("Data received in calculateQueryThroughput:", data);
+
+      // Validate input
+      if (!Array.isArray(data)) {
+        console.error("Invalid data format for Query Throughput:", data);
+        return { labels: [], throughput: [] }; // Return empty data to avoid further errors
+      }
+
+      const throughputByHour = data.reduce((acc, item) => {
+        let timestamp = item.arrival_timestamp;
+        if (timestamp) {
+          try {
+            timestamp = timestamp.split('.')[0]; // Remove microseconds if present
+            const dateObj = new Date(timestamp);
+            if (!isNaN(dateObj.getTime())) {
+              // Group by hour as 'YYYY-MM-DDTHH'
+              const hourStr = dateObj.toISOString().slice(0, 13);
+              acc[hourStr] = (acc[hourStr] || 0) + 1;
+            }
+          } catch (e) {
+            console.warn("Error parsing timestamp:", timestamp, e);
+          }
+        }
+        return acc;
+      }, {});
+
+      const labels = Object.keys(throughputByHour).sort();
+      const throughput = labels.map(label => throughputByHour[label]);
+      return { labels, throughput };
+    }
+
+    // ============================
+    // 5) Update Query Failures
+    // ============================
+    function updateQueryFailuresChart(data) {
+      const canvas = document.getElementById('queryFailuresChart');
+      const container = canvas.parentElement;
+      const ctx = canvas.getContext('2d');
+
+      if (queryFailuresChartInstance) {
+        queryFailuresChartInstance.destroy();
+      }
+
+      const { labels, failureCounts } = data;
+
+      if (!Array.isArray(labels) || !Array.isArray(failureCounts) || labels.length === 0 || failureCounts.length === 0) {
+        showNoDataMessage(container, "No failures to display");
+        canvas.style.display = 'none';
+        return;
+      }
+
+      hideNoDataMessage(container);
+      canvas.style.display = 'block';
+
+      queryFailuresChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels, // x-axis labels
+          datasets: [{
+            label: 'Failure Count',
+            data: failureCounts, // y-axis data
+            backgroundColor: '#dc3545'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: 'Failure Count'
+              }
+            },
+            x: {
+              title: {
+                display: true,
+                text: 'Short Fingerprint'
+              }
+            }
+          }
+        }
+      });
+    }
+
+  </script>
+</body>
+</html>
