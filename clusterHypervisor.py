@@ -1,15 +1,17 @@
 import os
+from config import SimulationSettings, EnvironmentSettings
 
 # Set the TCL and TK library paths
-os.environ['TCL_LIBRARY'] = r'C:\Users\willi\AppData\Local\Programs\Python\Python313\tcl\tcl8.6'
-os.environ['TK_LIBRARY'] = r'C:\Users\willi\AppData\Local\Programs\Python\Python313\tcl\tcl8.6'
+os.environ['TCL_LIBRARY'] = EnvironmentSettings.TCL_LIBRARY
+os.environ['TK_LIBRARY'] = EnvironmentSettings.TK_LIBRARY
 
 import tkinter as tk
 from tkinter import messagebox
 from tkinter import ttk
 import pandas as pd
+import time
 import threading
-from clusterEmulatorFactory import ClusterFactory
+from clusterSimulatorFactory import ClusterFactory
 from clusterDatabase import ClusterDatabase
 from config import SimulationSettings
 from clusterHypervisorUI import create_widgets, update_ui_availability
@@ -131,42 +133,65 @@ class ClusterHypervisor:
         update_ui_availability(self)
         
         
+    def get_active_action(self):
+        return self.running_action
+        
+        
     def start_simulation(self):
+        # Fetch action lock
+        if self.get_active_action() is not None:
+            return 
+        self.set_active_action(self.simulation_mode_var.get())
+        
         # Fetch clusters to perform operation on
         selected_clusters = self.get_selected_cluster_ids()       
         if not selected_clusters:
             messagebox.showwarning("No Clusters Selected", "Please select at least one cluster to start the simulation.")
-            return
-        
-        # Set simulation type
-        self.set_active_action(self.simulation_mode_var.get())      
+            return     
         
         # Function to run the simulation
-        def async_fnc(simulation_mode: str = "async"):
+        def async_fnc():
             try:
                 # Fetch simulation settings
+                action = self.get_active_action()
                 start_timestamp = pd.to_datetime(self.start_time_entry.get())
                 end_timestamp = pd.to_datetime(self.end_time_entry.get())
                 duration = (end_timestamp - start_timestamp).total_seconds()
-                simulation_step = pd.Timedelta(seconds=int(self.simulation_step_entry.get()))
+                step_size = pd.Timedelta(seconds=int(self.simulation_step_entry.get()))
                 update_frequency = 1.0 / float(self.cycle_time_entry.get())
+                project_cycle_time = float(self.cycle_time_entry.get())
                 
                 SimulationSettings.SIMULATION_STEP = int(self.simulation_step_entry.get())
                 SimulationSettings.SIMULATION_UPDATE_FREQUENCY = update_frequency
                 
-                # Perform the simulation
-                if simulation_mode == "sync":
-                    self.factory.start_clusters(selected_clusters, start_timestamp, pd.Timedelta(seconds=duration), simulation_step)
-                else:
-                    self.factory.start_clusters(selected_clusters, start_timestamp, pd.Timedelta(seconds=duration), simulation_step)      
+                # Initialize cluster processes
+                self.factory.start_clusters(selected_clusters)
                 messagebox.showinfo("Simulation Started", "The simulation has been started successfully.")
+                              
+                # Perform the synchronous simulation
+                if action == "sync":
+                    simulation_time = pd.Timedelta(0)
+                    last_execution_timestamp = time.time() - project_cycle_time
+                    while self.get_active_action() == "sync":
+                        tdiff = time.time() - last_execution_timestamp
+                        if not self.factory.get_step_clusters_complete(selected_clusters):
+                            continue
+                        if tdiff < project_cycle_time:
+                            time.sleep(max(1.0, project_cycle_time - tdiff))
+                        if simulation_time > pd.Timedelta(duration, unit="s"):
+                            break
+                                     
+                        self.factory.step_clusters(selected_clusters, start_timestamp + simulation_time, step_size)
+                        simulation_time += step_size     
+                        last_execution_timestamp = time.time()         
+                 
+                # Perform the asynchronous simulation   
+                else:
+                    self.factory.step_clusters(selected_clusters, start_timestamp, duration)
                 
-                # Wait for the simulation to finish
-                while any(cluster.is_running() for cluster in self.factory.clusters.values()):
-                    self.root.after(1000, lambda: None)  # Wait for 1 second before checking again
-                   
-                # Notify user when simulation is complete 
-                if(self.running_action == "sync"):
+                # Finish the simulation
+                self.factory.stop_clusters(selected_clusters)
+                if self.get_active_action() == action:
                     messagebox.showinfo("Simulation Completed", "The simulation has completed successfully.")
                 
             except Exception as e:
@@ -174,33 +199,35 @@ class ClusterHypervisor:
                
             finally:
                 self.set_active_action(None)
-                if self.threading_lock.locked():
-                    self.threading_lock.release()
                 
         # Asynchronous call, to keep the UI responsive
-        if self.threading_lock.locked():
-            return
-        self.threading_lock.acquire()
-        threading.Thread(target=async_fnc, args=(self.simulation_mode_var.get(),)).start()
+        threading.Thread(target=async_fnc).start()
     
     
     def stop_simulation(self):
-        # Fetch selected clusters
-        selected_clusters = self.get_selected_cluster_ids()      
-        if not selected_clusters:
-            messagebox.showwarning("No Clusters Selected", "Please select at least one cluster to stop the simulation.")
-            return
+        # Set active task
+        self.set_active_action("stop")
         
-        try:
-            self.factory.stop_clusters(selected_clusters)          
-            messagebox.showinfo("Simulation Stopped", "The simulation has been stopped successfully.")
+        def async_fnc():
+            # Fetch selected clusters
+            selected_clusters = self.get_selected_cluster_ids()      
+            if not selected_clusters:
+                messagebox.showwarning("No Clusters Selected", "Please select at least one cluster to stop the simulation.")
+                self.set_active_action(None)
+                return
+           
+            try:
+                self.factory.stop_clusters(selected_clusters)          
+                messagebox.showinfo("Simulation Stopped", "The simulation has been stopped successfully.")
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"An error occurred while stopping the simulation: {e}")
+                
+            finally:
+                self.set_active_action(None)
             
-        except Exception as e:
-            messagebox.showerror("Error", f"An error occurred while stopping the simulation: {e}")
-            
-        finally:
-            # Reset UI elements
-            self.set_active_action(None)
+        # Asynchronous call, to keep the UI responsive
+        threading.Thread(target=async_fnc).start()
     
     
     def update_database(self, force_parquet_update: bool, force_duckdb_update: bool):

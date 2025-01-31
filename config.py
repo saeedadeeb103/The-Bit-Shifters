@@ -1,6 +1,11 @@
 import os
 import pandas as pd
 
+class EnvironmentSettings:
+    """Environment variables for libraries"""
+    TCL_LIBRARY = r'C:\Users\Wilhelm Tharandt\AppData\Local\Programs\Python\Python313\tcl\tcl8.6'
+    TK_LIBRARY = r'C:\Users\Wilhelm Tharandt\AppData\Local\Programs\Python\Python313\tcl\tk8.6'
+
 class StorageSettings:
     """Storage settings for the project."""
     DATABASE_FOLDER = os.path.join(os.getcwd(), "databases")
