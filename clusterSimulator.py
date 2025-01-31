@@ -51,22 +51,31 @@ class ClusterSimulator:
             return 0, 0
         
         # print(f"Taking simulation step for cluster_id '{self.cluster_id}' at timestamp '{timestamp_begin}' ...")
-        # Fetch batch of data (read)
+        # Fetch batch of data (read) ------------------------------------------
         time_on_read_start = time.time()       
         batch = self.fetch_batch(timestamp_begin, duration)
-        operator_batch, user_batches = self.segment_batch(batch, SimulationSettings.MAX_BATCH_SIZE)
+        operator_data_batches, user_data_batcheses = self.segment_batch(batch, SimulationSettings.MAX_BATCH_SIZE)
         read_time = time.time() - time_on_read_start
 
-        # Send data to Kafka (write)
+        # Send data to Kafka (write) ------------------------------------------
+        # Start timer for performance insights
         time_on_send_start = time.time()
-        for operator_data_batch in operator_batch:
+
+        # Send data of one cluster to Kafka producer
+        for operator_data_batch in operator_data_batches:
+            operator_data_batch = self.keep_columns(operator_data_batch, KafkaSettings.OPERATOR_COLUMNS)
             self.kafka_producer_operator_data.process_and_send(operator_data_batch, f"{KafkaSettings.OPERATOR_TOPIC}_{self.cluster_id}")
-        for user_id, user_batch_list in user_batches.items():
+
+        # Send data of individual users to Kafka producer
+        for user_id, user_batch_list in user_data_batcheses.items():
             for user_data_batch in user_batch_list:
+              user_data_batch = self.keep_columns(user_data_batch, KafkaSettings.USER_COLUMNS)
               self.kafka_producer_user_data.process_and_send(user_data_batch, f"{KafkaSettings.USER_TOPIC}_{self.cluster_id}_{user_id}")
-            pass
+
+        # Stop timer
         send_time = time.time() - time_on_send_start
-                
+
+        # Finally -------------------------------------------------------------        
         # print(f"Complete simulation step for cluster_id '{self.cluster_id}' at timestamp '{timestamp_begin}' ...")
         return read_time, send_time
 
@@ -177,3 +186,8 @@ class ClusterSimulator:
             user_batches[user_id] = [user_df.iloc[i:i + max_rows_per_batch] for i in range(0, len(user_df), max_rows_per_batch)]
         
         return operator_batch, user_batches
+    
+
+    def keep_columns(self, batch_df, columns_to_keep: list):
+        """ Keeps only the specified columns in the given dataframe batch. """
+        return batch_df[columns_to_keep]
