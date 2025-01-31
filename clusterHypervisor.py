@@ -157,6 +157,7 @@ class ClusterHypervisor:
         selected_clusters = self.get_selected_cluster_ids()       
         if not selected_clusters:
             messagebox.showwarning("No Clusters Selected", "Please select at least one cluster to start the simulation.")
+            self.set_active_action(None)
             return     
         
         # Function to run the simulation
@@ -167,12 +168,8 @@ class ClusterHypervisor:
                 start_timestamp = pd.to_datetime(self.start_time_entry.get())
                 end_timestamp = pd.to_datetime(self.end_time_entry.get())
                 duration = (end_timestamp - start_timestamp).total_seconds()
-                step_size = pd.Timedelta(seconds=int(self.simulation_step_entry.get()))
-                update_frequency = 1.0 / float(self.cycle_time_entry.get())
-                project_cycle_time = float(self.cycle_time_entry.get())
-                
-                SimulationSettings.SIMULATION_STEP = int(self.simulation_step_entry.get())
-                SimulationSettings.SIMULATION_UPDATE_FREQUENCY = update_frequency
+                step_size = pd.Timedelta(seconds=SimulationSettings.SIMULATION_STEP)
+                project_cycle_time = 1.0 / SimulationSettings.SIMULATION_UPDATE_FREQUENCY
                 
                 # Initialize cluster processes
                 self.factory.start_clusters(selected_clusters)

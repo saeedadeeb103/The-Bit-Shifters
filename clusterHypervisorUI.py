@@ -76,6 +76,7 @@ def create_widgets(ui):
     ui.simulation_step_entry = ttk.Entry(ui.settings_frame)
     ui.simulation_step_entry.grid(row=4, column=1, padx=10, pady=5, sticky="ew")
     ui.simulation_step_entry.insert(0, str(SimulationSettings.SIMULATION_STEP))
+    ui.simulation_step_entry.bind("<FocusOut>", lambda _: set_project_step_size(ui.simulation_step_entry))
     
     ui.update_frequency_label = ttk.Label(ui.settings_frame, text="Project cyclic time (seconds):")
     ui.update_frequency_label.grid(row=5, column=0, padx=10, pady=5, sticky="w")
@@ -83,19 +84,8 @@ def create_widgets(ui):
     ui.cycle_time_entry = ttk.Entry(ui.settings_frame)
     ui.cycle_time_entry.grid(row=5, column=1, padx=10, pady=5, sticky="ew")
     ui.cycle_time_entry.insert(0, str(1.0 / SimulationSettings.SIMULATION_UPDATE_FREQUENCY))
+    ui.cycle_time_entry.bind("<FocusOut>", lambda _: set_project_cycle_time(ui.cycle_time_entry))
 
-    def update_cycle_time():
-        try:
-            cycle_time = float(ui.cycle_time_entry.get())
-            if cycle_time > 0:
-                SimulationSettings.SIMULATION_UPDATE_FREQUENCY = 1.0 / cycle_time
-            else:
-                raise ValueError("Cycle time must be greater than 0")
-        except ValueError as e:
-            tk.messagebox.showerror("Invalid Input", str(e))
-
-    ui.cycle_time_entry.bind("<FocusOut>", lambda _: update_cycle_time())
-    
     # Create buttons to start the simulation based on the selected mode
     ui.start_simulation_button = ttk.Button(ui.settings_frame, text="Start Run", command=lambda: ui.start_simulation())
     ui.start_simulation_button.grid(row=6, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
@@ -160,6 +150,27 @@ def create_widgets(ui):
     update_preselection(ui)
     update_ui_availability(ui)
 
+
+def set_project_cycle_time(element):
+    try:
+        project_cycle_time = float(element.get())
+        if project_cycle_time > 0:
+            SimulationSettings.SIMULATION_UPDATE_FREQUENCY = 1.0 / project_cycle_time
+        else:
+            raise ValueError("Cycle time must be greater than 0")
+    except ValueError as e:
+        tk.messagebox.showerror("Invalid Input", str(e))
+
+
+def set_project_step_size(element):
+    try:
+        step_size = float(element.get())
+        if step_size > 0:
+            SimulationSettings.SIMULATION_STEP = step_size
+        else:
+            raise ValueError("Step size must be greater than 0")
+    except ValueError as e:
+        tk.messagebox.showerror("Invalid Input", str(e))
 
 
 def sort_table(ui, col):
