@@ -13,7 +13,7 @@ import time
 import threading
 from clusterSimulatorFactory import ClusterFactory
 from clusterDatabase import ClusterDatabase
-from config import SimulationSettings
+from config import SimulationSettings, HypervisorSettings
 from clusterHypervisorUI import create_widgets, update_ui_availability
 
 class ClusterHypervisor:
@@ -51,10 +51,21 @@ class ClusterHypervisor:
         cluster_data = []
         for cluster_id, cluster in self.factory.clusters.items():
             isRunning = cluster.is_running()                 
-            execution_time = cluster.get_execution_time()     
             size = len(cluster.df) if hasattr(cluster, 'df') else "N/A"
             status = "Running" if isRunning else "Stopped"
-            utilization = f"{max(0, (execution_time * SimulationSettings.SIMULATION_UPDATE_FREQUENCY) * 100):.2f}%" if isRunning and SimulationSettings.SIMULATION_UPDATE_FREQUENCY != 0 else "N/A"
+
+            # Calculate the utilization
+            times = cluster.get_execution_times()
+            if isRunning and SimulationSettings.SIMULATION_UPDATE_FREQUENCY != 0:
+                utilization = (
+                    f"{max(0, (times[0] + times[1]) * SimulationSettings.SIMULATION_UPDATE_FREQUENCY * 100):.2f}% "
+                    f"(r: {max(0, times[0] * 1000.0):.2f} ms, "
+                    f"w: {max(0, times[1] * 1000.0):.2f} ms)"
+                )
+            else:
+                utilization = ("N/A")
+
+            # Create a tuple with the cluster data
             cluster_data.append((cluster_id, size, status, utilization))
         return cluster_data
     
@@ -91,12 +102,11 @@ class ClusterHypervisor:
     
     
     def schedule_logic_update(self):
-        CYCLE_TIME_MILLIS = 1000
-        
         # Schedule the update_table method to run periodically
         self.update_table()
-             
-        self.root.after(CYCLE_TIME_MILLIS, self.schedule_logic_update)  # Update every 1 second
+
+        # Schedule the logic update    
+        self.root.after(int(1000.0 / HypervisorSettings.DATA_UPDATE_FREQUENCY), self.schedule_logic_update)  # Update every 1 second
         
         
     def start_async_simulation(self):
@@ -175,9 +185,9 @@ class ClusterHypervisor:
                     while self.get_active_action() == "sync":
                         tdiff = time.time() - last_execution_timestamp
                         if not self.factory.get_step_clusters_complete(selected_clusters):
-                            continue
+                            pass
                         if tdiff < project_cycle_time:
-                            time.sleep(max(1.0, project_cycle_time - tdiff))
+                            time.sleep(project_cycle_time - tdiff)
                         if simulation_time > pd.Timedelta(duration, unit="s"):
                             break
                                      
@@ -240,7 +250,7 @@ class ClusterHypervisor:
                 self.database.download_redset_from_s3(force_parquet_update)
                 self.database.convert_parquet_to_duckdb(force_duckdb_update or
                                                         force_parquet_update)
-                self.factory.create_clusters_from_table(100)
+                self.factory.create_clusters_from_table(HypervisorSettings.MAX_CLUSTER_COUNT)
             except Exception as e:
                 messagebox.showerror("Error", f"An error occurred while reinitializing the database: {e}")
             self.set_active_action(None)

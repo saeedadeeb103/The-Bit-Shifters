@@ -18,7 +18,8 @@ class ClusterSimulator:
         self.factory = factory
         self.simulation_time = pd.Timestamp.now()
         self.step_size = None
-        self.current_execution_time = 0.0
+        self.current_read_time = 0.0
+        self.current_send_time = 0.0
         
         # Variables for threading and simulation control
         self.runtime_stop_event = threading.Event()
@@ -28,11 +29,11 @@ class ClusterSimulator:
         self._parent_pid = os.getpid()
 
 
-    def get_execution_time(self) -> float:
+    def get_execution_times(self):
         """ 
-        Returns the current execution time of the cluster simulator in seconds.
+        Returns a tuple with the current read_time and send_time of the cluster simulator in seconds.
         """
-        return self.current_execution_time
+        return self.current_read_time, self.current_send_time
 
 
     def is_running(self):
@@ -45,31 +46,28 @@ class ClusterSimulator:
         Executes a single step of the cluster simulator with the given playback speed and time range.
         """       
         if self.df.empty:
-            return
+            return 0, 0
         
         # print(f"Taking simulation step for cluster_id '{self.cluster_id}' at timestamp '{timestamp_begin}' ...")
-        execution_time = time.time()
-        
-        # Fetch batch of data
+        # Fetch batch of data (read)
+        time_on_read_start = time.time()       
         batch = self.fetch_batch(timestamp_begin, duration)
         operator_batch, user_batches = self.segment_batch(batch, SimulationSettings.MAX_BATCH_SIZE)
+        read_time = time.time() - time_on_read_start
 
-        # Send operator batch to Kafka
+        # Send data to Kafka (write)
+        time_on_send_start = time.time()
         for operator_data in operator_batch:
             self.kafka_producer_operator_data.process_and_send(operator_data)
-
-        # Send user batches to Kafka
         for user_id, user_batch_list in user_batches.items():
             # user_producer = KafkaProducer(bootstrap_servers=self.kafka_broker, topic=f"user_data_{user_id}")
             # for user_batch in user_batch_list:
-               # user_producer.process_and_send(user_batch)
-            i = 1
+              # user_producer.process_and_send(user_batch)
+            pass
+        send_time = time.time() - time_on_send_start
                 
-        # Calculate elapsed time and adjust sleep time accordingly
-        execution_time = time.time() - execution_time
-        
         # print(f"Complete simulation step for cluster_id '{self.cluster_id}' at timestamp '{timestamp_begin}' ...")
-        return execution_time
+        return read_time, send_time
 
 
     def start(self):
@@ -88,7 +86,7 @@ class ClusterSimulator:
                     if self.runtime_step_event.is_set():      
                         if self.factory is None:
                             break
-                        self.current_execution_time = self.step(self.simulation_time, self.step_size)
+                        self.current_read_time, self.current_send_time = self.step(self.simulation_time, self.step_size)
                         self.runtime_step_event.clear()                     
                     self.runtime_event.clear()
                     
@@ -143,26 +141,20 @@ class ClusterSimulator:
     def fetch_batch(self, start_timestamp: pd.Timestamp, duration: pd.Timedelta):
         """ Fetches a batch of data from the dataframe based on the given start timestamp and duration.
             Returns a dictionary of dataframes for each user_id and the full batch dataframe. """
-        # Fetch all data based on the given timestamp range
+        # Use boolean indexing for better performance
         end_timestamp = start_timestamp + duration
-        batch_df = self.df[(self.df['arrival_timestamp'] >= start_timestamp) & (self.df['arrival_timestamp'] < end_timestamp)]
+        mask = (self.df['arrival_timestamp'] >= start_timestamp) & (self.df['arrival_timestamp'] < end_timestamp)
+        batch_df = self.df.loc[mask]
         return batch_df
 
 
     def segment_batch(self, batch_df, max_rows_per_batch):
         """ Segments the batch into operator and user batches based on the user_id. 
             Batches are limited to a maximum size. """
-        operator_batch = []
+        operator_batch = [batch_df.iloc[i:i + max_rows_per_batch] for i in range(0, len(batch_df), max_rows_per_batch)]
+        
         user_batches = {}
-
-        for start in range(0, len(batch_df), max_rows_per_batch):
-            end = start + max_rows_per_batch
-            operator_batch.append(batch_df.iloc[start:end])
-
         for user_id, user_df in batch_df.groupby('user_id'):
-            user_batches[user_id] = []
-            for start in range(0, len(user_df), max_rows_per_batch):
-                end = start + max_rows_per_batch
-                user_batches[user_id].append(user_df.iloc[start:end])
+            user_batches[user_id] = [user_df.iloc[i:i + max_rows_per_batch] for i in range(0, len(user_df), max_rows_per_batch)]
         
         return operator_batch, user_batches

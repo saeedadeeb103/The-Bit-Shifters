@@ -10,8 +10,8 @@ class KafkaProducer:
         # Debugging: Print the batch size and first entry time
         if not df.empty:
             first_entry_time = df.iloc[0]['arrival_timestamp']
-            user_id_count = df['user_id'].nunique()
-            print(f"Kafka {self.topic} - {first_entry_time}: size={len(df)}, unique user_ids={user_id_count}")
+            # user_id_count = df['user_id'].nunique()
+            print(f"Kafka {self.topic} - {first_entry_time}: size={len(df)}")
         else:
             print(f"Kafka {self.topic} - No data in batch")
             return
