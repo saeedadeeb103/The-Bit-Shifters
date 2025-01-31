@@ -24,3 +24,10 @@ class SimulationSettings:
     SIMULATION_DURATION = 600  # Time in seconds
     SIMULATION_STEP = 60  # Time in seconds
     MAX_BATCH_SIZE = 1000  # Maximum number of rows per batch
+
+class KafkaSettings:
+    """Settings for Kafka."""
+    OPERATOR_BOOTSTRAP_SERVERS = "localhost:9092"
+    OPERATOR_TOPIC = "operator_data"
+    USER_BOOTSTRAP_SERVERS = "localhost:9093"
+    USER_TOPIC = "user_data"

@@ -3,16 +3,14 @@ import time
 import os
 import duckdb
 import pandas as pd # Needed to handle timestamps
-from config import SimulationSettings
+from config import SimulationSettings, KafkaSettings
 from kafkaProducer import KafkaProducer
 
 class ClusterSimulator:
-    def __init__(self, cluster_id: str, data_source: str, kafka_broker="localhost:9092", factory = None):
+    def __init__(self, cluster_id: str, data_source: str, factory = None):
         """ Initializes a simulated Redshift cluster. """
         self.cluster_id = cluster_id
         self.data_source = data_source
-        self.kafka_broker = kafka_broker
-        self.kafka_producer_operator_data = KafkaProducer(bootstrap_servers=self.kafka_broker, topic=f"operator_data_{cluster_id}")
         self.load_data()
         self.thread = None
         self.factory = factory
@@ -20,6 +18,10 @@ class ClusterSimulator:
         self.step_size = None
         self.current_read_time = 0.0
         self.current_send_time = 0.0
+
+        # Producers for Kafka
+        self.kafka_producer_operator_data = None
+        self.kafka_producer_user_data = None
         
         # Variables for threading and simulation control
         self.runtime_stop_event = threading.Event()
@@ -57,12 +59,11 @@ class ClusterSimulator:
 
         # Send data to Kafka (write)
         time_on_send_start = time.time()
-        for operator_data in operator_batch:
-            self.kafka_producer_operator_data.process_and_send(operator_data)
+        for operator_data_batch in operator_batch:
+            self.kafka_producer_operator_data.process_and_send(operator_data_batch, f"{KafkaSettings.OPERATOR_TOPIC}_{self.cluster_id}")
         for user_id, user_batch_list in user_batches.items():
-            # user_producer = KafkaProducer(bootstrap_servers=self.kafka_broker, topic=f"user_data_{user_id}")
-            # for user_batch in user_batch_list:
-              # user_producer.process_and_send(user_batch)
+            for user_data_batch in user_batch_list:
+              self.kafka_producer_user_data.process_and_send(user_data_batch, f"{KafkaSettings.USER_TOPIC}_{self.cluster_id}_{user_id}")
             pass
         send_time = time.time() - time_on_send_start
                 
@@ -79,7 +80,17 @@ class ClusterSimulator:
             # Set the runtime events
             self.runtime_running.set()
             self.runtime_event.clear()
-            
+
+            # Initialize the operators Kafka producer
+            self.kafka_producer_operator_data = KafkaProducer(
+                f"kafka_producer_operator_data_{self.cluster_id}",
+                bootstrap_servers=KafkaSettings.OPERATOR_BOOTSTRAP_SERVERS
+            )
+            self.kafka_producer_user_data = KafkaProducer(
+                f"kafka_producer_user_data_{self.cluster_id}",
+                bootstrap_servers=KafkaSettings.USER_BOOTSTRAP_SERVERS
+            )
+
             # Run the cluster simulator (main loop)
             while self.runtime_running.is_set() and not self.runtime_stop_event.is_set():
                 if self.runtime_event.wait():  
@@ -93,10 +104,8 @@ class ClusterSimulator:
             # Debug
             print(f"Terminating thread (main loop) for cluster_id '{self.cluster_id}' ...")
             
-            # Reset the runtime events   
-            self.runtime_event.clear()        
-            self.runtime_stop_event.clear()
-            self.runtime_running.clear()
+            # Cleanup
+            self.cleanup_on_stop()
             
         # Debug
         print(f"Starting thread (main loop) for cluster_id '{self.cluster_id}' ...")
@@ -121,13 +130,23 @@ class ClusterSimulator:
                 self.thread.join()
                 self.thread = None  # Ensure the thread reference is cleared
                 
+        # Cleanup
+        self.cleanup_on_stop()
+        
+        # Debug message
+        print(f"Stopped cluster simulator for cluster_id '{self.cluster_id}' ...")
+
+
+    def cleanup_on_stop(self):
+        # Remove the Kafka producers
+        self.kafka_producer_operator_data = None
+        self.kafka_producer_user_data = None
+
         # Reset the running and take_step events
         self.runtime_running.clear()
         self.runtime_event.clear()
         self.runtime_step_event.clear()
-        
-        # Debug message
-        print(f"Stopped cluster simulator for cluster_id '{self.cluster_id}' ...")
+        self.runtime_stop_event.clear()
 
 
     def load_data(self):
