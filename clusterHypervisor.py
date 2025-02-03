@@ -247,6 +247,7 @@ class ClusterHypervisor:
                 self.database.download_redset_from_s3(force_parquet_update)
                 self.database.convert_parquet_to_duckdb(force_duckdb_update or
                                                         force_parquet_update)
+                self.factory.delete_all_clusters()
                 self.factory.create_clusters_from_table(HypervisorSettings.MAX_CLUSTER_COUNT)
             except Exception as e:
                 messagebox.showerror("Error", f"An error occurred while reinitializing the database: {e}")
