@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1.0"
+  />
+  <title>Customer Dashboard</title>
+  <!-- Bootstrap CSS -->
+  <link
+    rel="stylesheet"
+    href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+  />
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Optionally, link your own CSS -->
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='style.css') }}"
+  />
+</head>
+<body>
+  <!-- SIDEBAR (NAVY) -->
+  <div class="sidebar" id="mySidebar">
+    <!-- Hamburger icon (top) -->
+    <button class="toggle-btn" onclick="toggleSidebar()">&#9776;</button>
+
+    <!-- The gold sliding panel (hidden when collapsed) -->
+    <div class="nav-panel">
+      <h3 style="margin-top: 30px;">PAGE NAVIGATION</h3>
+      <ul class="nav-links">
+        <li onclick="window.location.href='/'">Dashboard</li>
+      </ul>
+
+      <button class="logout-button" onclick="window.location.href='/logout'">Logout</button>
+    </div>
+
+    <!-- Icons at bottom of navy bar -->
+    <div class="sidebar-icons">
+      <div class="icon-circle">i</div>
+      <div class="icon-circle">?</div>
+    </div>
+  </div>
+
+  <!-- Collapse arrow button -->
+  <button class="collapse-arrow" onclick="toggleSidebar()">&larr;</button>
+
+  <!-- MAIN CONTENT -->
+  <div class="main-content">
+    <div class="container-fluid">
+      <div class="row mb-4">
+        <div class="col-12">
+          <h1 class="text-center my-4">Customer Dashboard</h1>
+        </div>
+      </div>
+
+
+
+      <!-- KPI CARDS -->
+      <div class="row">
+        <div class="col-md-4">
+          <div class="card kpi-card">
+            <div class="card-body">
+              <h5 class="card-title">Total Queries</h5>
+              <p class="card-value" id="totalQueries">0</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card kpi-card">
+            <div class="card-body">
+              <h5 class="card-title">Stable Queries</h5>
+              <p class="card-value" id="stableQueries">0</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card kpi-card">
+            <div class="card-body">
+              <h5 class="card-title">Aborted Queries</h5>
+              <p class="card-value" id="abortedQueries">0</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHARTS -->
+      <div class="row">
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Query Execution Time</h5>
+              <div class="chart-container" style="height: 300px;">
+                <canvas id="executionTimeChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Stable Query Performance</h5>
+              <div class="chart-container" style="height: 300px;">
+                <canvas id="stableQueryPerformanceChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Query Throughput</h5>
+              <div class="chart-container" style="height: 300px;">
+                <canvas id="queryThroughputChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Query Failures</h5>
+              <div class="chart-container" style="height: 300px;">
+                <canvas id="queryFailuresChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alerts Chart -->
+      <!-- <div class="row">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Performance Degradation Alerts</h5>
+              <div class="chart-container" style="height: 300px;">
+                <canvas id="degradationChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div> -->
+    </div> <!-- end container-fluid -->
+  </div>   <!-- end main-content -->
+
+  <!-- SCRIPTS -->
+  <script>
+    // --------------------------------------------
+    // SIDEBAR TOGGLE
+    // --------------------------------------------
+    let sidebarToggleTimeout;
+    function toggleSidebar() {
+      clearTimeout(sidebarToggleTimeout);
+      const sidebar = document.getElementById("mySidebar");
+      sidebarToggleTimeout = setTimeout(() => {
+        sidebar.classList.toggle("expanded");
+      }, 50);
+    }
+
+    // --------------------------------------------
+    // GLOBAL Chart Instances (to destroy on update)
+    // --------------------------------------------
+    let executionTimeChartInstance = null;
+    let stableQueryPerformanceChartInstance = null;
+    let queryThroughputChartInstance = null;
+    let queryFailuresChartInstance = null;
+    let degradationChartInstance = null;
+
+    // --------------------------------------------
+    // ON PAGE LOAD
+    // --------------------------------------------
+    document.addEventListener('DOMContentLoaded', async function () {
+      try {
+        const authCheck = await fetch('/api/check-auth');
+        if (!authCheck.ok) {
+          window.location.href = "/login";
+          return;
+        }
+
+        // Removed filter event listener setup
+        await initializeDashboard();
+
+      } catch (err) {
+        console.error("Initialization error:", err);
+      }
+    });
+
+
+    // --------------------------------------------
+    // IMPROVED FETCH WITH BETTER ERROR HANDLING
+    // --------------------------------------------
+    async function fetchWithAuth(url) {
+      try {
+        const resp = await fetch(url);
+        if (resp.status === 401) {  // 🔥 User is not authenticated
+          window.location.href = "/login";
+          return;
+        }
+
+        if (!resp.ok) {
+          throw new Error(`HTTP error: ${resp.status}`);
+        }
+
+        return await resp.json();
+      } catch (err) {
+        console.error("Fetch error:", err);
+        window.location.href = "/login";  // Redirect to login on any fetch failure
+      }
+    }
+
+
+    // --------------------------------------------
+    // INITIALIZE DASHBOARD
+    // --------------------------------------------
+    async function initializeDashboard() {
+      try {
+        await updateDashboard();
+      } catch (err) {
+        console.error("Dashboard initialization failed:", err);
+        alert("Failed to initialize dashboard. Please try refreshing.");
+      }
+    }
+
+    // --------------------------------------------
+    // UPDATED DASHBOARD FUNCTION
+    // --------------------------------------------
+    async function updateDashboard() {
+      try {
+        // Removed queryType filter logic
+        const dashboardData = await fetchWithAuth('/api/user-data');
+        
+        if (!dashboardData || !dashboardData.data) {
+          clearCharts();
+          return;
+        }
+
+        // Use all data without filtering
+        const filteredData = dashboardData.data;
+        const stableData = filteredData.filter(item => item.stable === true);
+
+        updateKPIs(filteredData, stableData);
+        updateExecutionTimeChart(filteredData);
+        updateStableQueryPerformanceChart(stableData);
+        
+        const throughputObj = calculateQueryThroughput(filteredData);
+        updateQueryThroughputChart(throughputObj);
+
+        const failuresObj = calculateQueryFailures(filteredData);
+        updateQueryFailuresChart(failuresObj);
+
+        // await fetchDegradationAlerts();
+
+      } catch (err) {
+        console.error("Dashboard update error:", err);
+      }
+    }
+
+    // --------------------------------------------
+    // UTILITY FUNCTIONS
+    // --------------------------------------------
+    function clearCharts() {
+      // Implementation to reset chart visualizations
+      [executionTimeChartInstance, stableQueryPerformanceChartInstance, 
+      queryThroughputChartInstance, queryFailuresChartInstance,
+      degradationChartInstance].forEach(chart => {
+        if (chart) chart.destroy();
+      });
+    }
+
+    async function populateUserIds() {
+      try {
+        const userList = await fetchWithAuth('/api/user-ids');
+        const userIdDropdown = document.getElementById('userIdFilter');
+        
+        // Clear existing options
+        userIdDropdown.innerHTML = '';
+        
+        // Add new options
+        userList.forEach(uid => {
+          const option = document.createElement('option');
+          option.value = uid;
+          option.textContent = uid;
+          userIdDropdown.appendChild(option);
+        });
+      } catch (err) {
+        console.error("Error populating user IDs:", err);
+        throw err;
+      }
+    }
+    // --------------------------------------------
+    // KPI CARDS
+    // --------------------------------------------
+    function updateKPIs(data, stableData) {
+      // console.log("📌 Data received in updateKPIs:", { totalData: data, stableQueries: stableData });
+
+      const totalQueriesElem = document.getElementById('totalQueries');
+      const stableQueriesElem = document.getElementById('stableQueries');
+      const abortedQueriesElem = document.getElementById('abortedQueries');
+
+      if (!data || data.length === 0) {
+        totalQueriesElem.textContent = 0;
+        stableQueriesElem.textContent = 0;
+        abortedQueriesElem.textContent = 0;
+        return;
+      }
+
+      const totalQueries = data.length;
+      const stableQueries = stableData ? stableData.length : 0;
+      const abortedQueries = data.filter(row => row.was_aborted).length;
+
+      // console.log(`✅ Stable Queries Count: ${stableQueries}`); // Debugging output
+
+      totalQueriesElem.textContent = totalQueries;
+      stableQueriesElem.textContent = stableQueries;
+      abortedQueriesElem.textContent = abortedQueries;
+    }
+
+
+    // --------------------------------------------
+    // CHART: Execution Time
+    // --------------------------------------------
+    function updateExecutionTimeChart(data) {
+      const canvas = document.getElementById('executionTimeChart');
+      const ctx = canvas.getContext('2d');
+
+      if (executionTimeChartInstance) {
+        executionTimeChartInstance.destroy();
+      }
+
+      if (!data || data.length === 0) {
+        showNoDataMessage(canvas, "No queries to display");
+        return;
+      } else {
+        hideNoDataMessage(canvas);
+      }
+
+      // Group by day => average execution_duration_ms
+      const dateMap = {};
+      data.forEach(row => {
+        const ts = new Date(row.arrival_timestamp);
+        if (isNaN(ts.getTime())) return;
+        
+        const dateStr = ts.toISOString().slice(0, 10); // YYYY-MM-DD
+        if (!dateMap[dateStr]) dateMap[dateStr] = { total: 0, count: 0 };
+
+        const execTime = parseFloat(row.execution_duration_ms);
+        if (!isNaN(execTime)) {  // ✅ Prevent NaN errors
+          dateMap[dateStr].total += execTime;
+          dateMap[dateStr].count += 1;
+        }
+      });
+      const labels = Object.keys(dateMap).sort();
+      const avgTimes = labels.map(date => {
+        const { total, count } = dateMap[date];
+        return (total / count).toFixed(2);
+      });
+
+      executionTimeChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Avg Exec Time (ms)',
+            data: avgTimes,
+            backgroundColor: '#007bff',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    // Utility to show "No data" message on canvas
+    function showNoDataMessage(canvas, message) {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#aaa';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '16px sans-serif';
+      ctx.fillText(message, canvas.width / 2, canvas.height / 2);
+    }
+
+    function hideNoDataMessage(canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // --------------------------------------------
+    // CHART: Stable Query Performance
+    // --------------------------------------------
+    function updateStableQueryPerformanceChart(data) {
+      const canvas = document.getElementById('stableQueryPerformanceChart');
+      const ctx = canvas.getContext('2d');
+
+      // Destroy existing chart
+      if (stableQueryPerformanceChartInstance) {
+        stableQueryPerformanceChartInstance.destroy();
+      }
+
+      // Handle empty data
+      if (!data || data.length === 0) {
+        showNoDataMessage(canvas, "No stable queries to display");
+        return;
+      } else {
+        hideNoDataMessage(canvas);
+      }
+
+      // Enhanced data processing
+      const fpMap = {};
+      data.forEach(row => {
+        const fp = row.feature_fingerprint || 'Unknown';
+        const duration = parseFloat(row.execution_duration_ms) || 0;
+        
+        if (!fpMap[fp]) {
+          fpMap[fp] = {
+            durations: [],       // Store all durations for stats
+            count: 0,
+            total: 0,
+            max: -Infinity,
+            min: Infinity
+          };
+        }
+        
+        fpMap[fp].durations.push(duration);
+        fpMap[fp].count++;
+        fpMap[fp].total += duration;
+        fpMap[fp].max = Math.max(fpMap[fp].max, duration);
+        fpMap[fp].min = Math.min(fpMap[fp].min, duration);
+      });
+
+      // Calculate statistics
+      const labels = Object.keys(fpMap);
+      const chartData = labels.map(fp => {
+        const stats = fpMap[fp];
+        
+        return {
+          avg: stats.total / stats.count,
+          median: calculateMedian(stats.durations),
+          stdDev: calculateStandardDeviation(stats.durations),
+          max: stats.max,
+          min: stats.min,
+          count: stats.count
+        };
+      });
+
+      // Helper functions
+      function calculateMedian(values) {
+        const sorted = [...values].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+      }
+
+      function calculateStandardDeviation(values) {
+        const avg = values.reduce((a,b) => a + b, 0) / values.length;
+        return Math.sqrt(values.map(v => Math.pow(v - avg, 2)).reduce((a,b) => a + b, 0) / values.length);
+      }
+
+      // Create chart with enhanced diagnostics
+      stableQueryPerformanceChartInstance = new Chart(ctx, {
+        type: 'bar', // Better for comparing individual queries
+        data: {
+          labels,
+          datasets: [{
+            label: 'Average Execution Time (ms)',
+            data: chartData.map(d => d.avg),
+            backgroundColor: 'rgba(40, 167, 69, 0.5)',
+            borderColor: '#28a745',
+            borderWidth: 2, // Add border width
+            hoverBackgroundColor: 'rgba(40, 167, 69, 0.8)', // Optional hover effect
+            // Choose one of these options for bar thickness:
+            barThickness: 20, // Fixed pixel width
+            // OR use percentage-based sizing:
+            categoryPercentage: 0.8, // 
+            barPercentage: 0.9, // 
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              ticks: {
+                callback: function(value) {
+                  const label = labels[value];
+                  return label.length > 15 ? label.substring(0, 12) + '...' : label;
+                },
+                grid: {
+                    offset: true // Adds spacing at both ends
+                }
+              }
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'Milliseconds'
+              }
+            }
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                title: (tooltipItems) => labels[tooltipItems[0].dataIndex],
+                afterBody: (tooltipItems) => {
+                  const data = chartData[tooltipItems[0].dataIndex];
+                  return [
+                    `Median: ${data.median.toFixed(2)}ms`,
+                    `Max: ${data.max.toFixed(2)}ms`,
+                    `Min: ${data.min.toFixed(2)}ms`,
+                    `Executions: ${data.count}`,
+                    `Std Dev: ${data.stdDev.toFixed(2)}`
+                  ];
+                }
+              }
+            },
+            annotation: {
+              annotations: {
+                performanceThreshold: {
+                  type: 'line',
+                  yMin: 1000, // Set your performance threshold
+                  yMax: 1000,
+                  borderColor: 'red',
+                  borderWidth: 4,
+                  borderDash: [5, 5],
+                  label: {
+                    content: 'Performance Threshold',
+                    display: true,
+                    position: 'end'
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      // Add click handler for drill-down
+      canvas.onclick = (event) => {
+        const activeElements = stableQueryPerformanceChartInstance.getElementsAtEventForMode(
+          event, 'nearest', { intersect: true }, true
+        );
+        
+        if (activeElements.length > 0) {
+          const idx = activeElements[0].index;
+          const fingerprint = labels[idx];
+          analyzeProblematicQuery(fingerprint, fpMap[fingerprint]);
+        }
+      };
+    }
+
+    // Example diagnostic function
+    function analyzeProblematicQuery(fingerprint, stats) {
+      console.log(`Diagnostics for ${fingerprint}:`);
+      console.log('Execution count:', stats.count);
+      console.log('Time distribution:', {
+        avg: stats.total / stats.count,
+        median: calculateMedian(stats.durations),
+        stdDev: calculateStandardDeviation(stats.durations),
+        max: stats.max,
+        min: stats.min
+      });
+      
+      // Add your custom analysis logic here:
+      if (stats.max > 3 * stats.avg) {
+        console.warn('⚠️ Huge outliers detected - investigate sporadic slow executions');
+      }
+      if (stats.stdDev > stats.avg) {
+        console.warn('⚠️ High variance - execution times are inconsistent');
+      }
+      if (stats.count < 5) {
+        console.warn('⚠️ Low sample size - averages may be unreliable');
+      }
+    }
+
+    // --------------------------------------------
+    // CHART: Query Throughput
+    // --------------------------------------------
+    function calculateQueryThroughput(data) {
+      // Group queries by hour => # of queries per hour
+      const hourlyMap = {};
+      data.forEach(row => {
+        const ts = new Date(row.arrival_timestamp);
+        if (isNaN(ts.getTime())) return;
+        const hourKey = ts.toISOString().slice(0, 13); // e.g. 2024-05-10T09
+        if (!hourlyMap[hourKey]) hourlyMap[hourKey] = 0;
+        hourlyMap[hourKey]++;
+      });
+
+      const labels = Object.keys(hourlyMap).sort();
+      const throughput = labels.map(l => hourlyMap[l]);
+      return { labels, throughput };
+    }
+
+    function updateQueryThroughputChart({ labels, throughput }) {
+      const canvas = document.getElementById('queryThroughputChart');
+      const ctx = canvas.getContext('2d');
+
+      if (queryThroughputChartInstance) {
+        queryThroughputChartInstance.destroy();
+      }
+
+      if (!labels || labels.length === 0) {
+        showNoDataMessage(canvas, "No throughput data to display");
+        return;
+      } else {
+        hideNoDataMessage(canvas);
+      }
+
+      queryThroughputChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Queries per Hour',
+            data: throughput,
+            borderColor: '#ffc107',
+            fill: false
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false
+        }
+      });
+    }
+
+    // --------------------------------------------
+    // CHART: Query Failures
+    // --------------------------------------------
+    function calculateQueryFailures(data) {
+      // Group by fingerprint => sum of was_aborted
+      const failMap = {};
+      data.forEach(row => {
+        const fp = row.feature_fingerprint || 'Unknown';
+        if (!failMap[fp]) failMap[fp] = 0;
+        if (row.was_aborted == 1) {
+          failMap[fp]++;
+        }
+      });
+      const labels = Object.keys(failMap);
+      const failureCounts = labels.map(fp => failMap[fp]);
+      return { labels, failureCounts };
+    }
+
+    function updateQueryFailuresChart({ labels, failureCounts }) {
+      const canvas = document.getElementById('queryFailuresChart');
+      const ctx = canvas.getContext('2d');
+
+      if (queryFailuresChartInstance) {
+        queryFailuresChartInstance.destroy();
+      }
+
+      if (!labels || labels.length === 0) {
+        showNoDataMessage(canvas, "No failures to display");
+        return;
+      } else {
+        hideNoDataMessage(canvas);
+      }
+
+      queryFailuresChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Failure Count',
+            data: failureCounts,
+            backgroundColor: '#dc3545',
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { beginAtZero: true, title: { display: true, text: 'Failure Count' } },
+            x: {
+              ticks: {
+                autoSkip: true, // Ensures all labels are considered
+                maxRotation: 45, // Slight tilt for readability
+                minRotation: 0,
+                callback: function(value, index, values) {
+                  const label = labels[index];
+                  return label.length > 10 ? label.substring(0, 10) + '...' : label; // Truncate long labels
+                },
+                text: "Feature Fingerprint"
+              }
+            }
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                title: function(tooltipItems) {
+                  return labels[tooltipItems[0].dataIndex]; // Show full label on hover
+                }
+              }
+            }
+          }
+        }
+      });
+
+    }
+    // --------------------------------------------
+    // ALERTS (Performance Degradation)
+    // --------------------------------------------
+   // --------------------------------------------
+  // ALERTS (Performance Degradation)
+  // --------------------------------------------
+  // async function fetchDegradationAlerts() {
+  //   try {
+  //     const resp = await fetch(`/api/alerts`); // ✅ Remove userId
+  //     if (!resp.ok) {
+  //       throw new Error(`HTTP error: ${resp.status}`);
+  //     }
+  //     let alerts = await resp.json();
+
+  //     // Filter out invalid values
+  //     alerts = alerts
+  //       .filter(a => a.degradation_percentage !== null && !isNaN(a.degradation_percentage))
+  //       .sort((a, b) => b.degradation_percentage - a.degradation_percentage);
+
+  //     displayAlerts(alerts);
+  //   } catch (err) {
+  //     console.error("Error fetching alerts:", err);
+  //   }
+  // }
+
+  // function displayAlerts(alerts) {
+  //   const canvas = document.getElementById('degradationChart');
+  //   const ctx = canvas.getContext('2d');
+
+  //   if (degradationChartInstance) {
+  //     degradationChartInstance.destroy();
+  //   }
+
+  //   if (!alerts || alerts.length === 0) {
+  //     showNoDataMessage(canvas, "No performance degradation detected");
+  //     return;
+  //   } else {
+  //     hideNoDataMessage(canvas);
+  //   }
+
+  //   // Prepare data for the chart
+  //   const labels = alerts.map(a => a.fingerprint || 'Unknown Query');
+  //   const dataValues = alerts.map(a => parseFloat(a.degradation_percentage));
+
+  //   degradationChartInstance = new Chart(ctx, {
+  //     type: 'bar',
+  //     data: {
+  //       labels,
+  //       datasets: [{
+  //         label: 'Performance Degradation (%)',
+  //         data: dataValues,
+  //         backgroundColor: dataValues.map(val => {
+  //           if (val >= 50) return '#dc3545';  // Red (Critical)
+  //           if (val >= 20) return '#ffc107';  // Yellow (Warning)
+  //           return '#28a745';                 // Green (Normal)
+  //         }),
+  //         borderWidth: 1
+  //       }]
+  //     },
+  //     options: {
+  //       responsive: true,
+  //       maintainAspectRatio: false,
+  //       indexAxis: 'y',
+  //       plugins: {
+  //         tooltip: {
+  //           callbacks: {
+  //             label: function (context) {
+  //               return ` Degradation: ${context.raw}%`;
+  //             }
+  //           }
+  //         }
+  //       },
+  //       scales: {
+  //         x: {
+  //           beginAtZero: true,
+  //           ticks: {
+  //             callback: (value) => `${value}%`
+  //           }, 
+            
+  //         }
+  //       }
+  //     }
+  //   });
+  // }
+  </script>
+</body>
+</html>
