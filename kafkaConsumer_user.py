@@ -70,7 +70,6 @@ class KafkaConsumer:
     def store_to_duckdb(self, data, topic):
         """Stores the processed data to DuckDB, creating a separate table for each user_id while keeping logs in a single table."""
         try:
-            # Ensure DuckDB file and directory exist
             db_path = StorageSettings.USER_CLUSTER_FILE_PATH
             db_dir = os.path.dirname(db_path)
             if db_dir and not os.path.exists(db_dir):

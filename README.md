@@ -1,5 +1,5 @@
 # **The-Bit-Shifters**  
-This project was created using **Python 3.13.0**.
+This project was created using **Python 3.11.0**.
 
 ## **Installation**  
 Follow these steps to set up the project environment:  
@@ -36,7 +36,7 @@ Ensure you have the following installed on your system:
     tar -xzf kafka_2.13-3.2.1.tgz -C /path/to/install
     ```
 
-## **Step 2: Configure Kafka Brokers**
+## **Step 2: Configure Kafka Brokers Zookeepers**
 1. Navigate to the Kafka config directory:
     ```bash
     cd /path/to/install/kafka_2.13-3.2.1/config
@@ -46,17 +46,33 @@ Ensure you have the following installed on your system:
     cp server.properties server-9092.properties
     cp server.properties server-9093.properties
     ```
-3. Modify `server-9092.properties`:
+3. Locate the **zookeeper.properties** file and make two copies:
+    ```bash
+    cp zookeeper.properties zookeeper-9092.properties
+    cp zookeeper.properties zookeeper-9093.properties
+    ```
+4. Modify `server-9092.properties`:
     ```properties
     broker.id=1
     listeners=PLAINTEXT://localhost:9092
     log.dir=/tmp/kafka-logs-1
+    zookeeper.connect=localhost:2182
     ```
-4. Modify `server-9093.properties`:
+5. Modify `server-9093.properties`:
     ```properties
     broker.id=2
     listeners=PLAINTEXT://localhost:9093
     log.dir=/tmp/kafka-logs-2
+    zookeeper.connect=localhost:2183
+    ```
+
+6. Modify `zookeeper-9092.properties`:
+    ```properties
+    clientPort=2182
+    ```
+7. Modify `zookeeper-9093.properties`:
+    ```properties
+    clientPort=2183
     ```
 
 ## **Step 3: Start Kafka and Zookeeper**
@@ -66,13 +82,17 @@ Ensure you have the following installed on your system:
     ```
 2. Start the Zookeeper server:
     ```bash
-    bin/zookeeper-server-start.sh config/zookeeper.properties
+    bin/zookeeper-server-start.sh config/zookeeper-9092.properties
     ```
-3. Open a new terminal and start Kafka broker on port 9092:
+3. Open a new terminal and start another Zookeeper:
+    ```bash
+    bin/zookeeper-server-start.sh config/zookeeper-9093.properties
+    ```
+4. Open a new terminal and start Kafka broker on port 9092:
     ```bash
     bin/kafka-server-start.sh config/server-9092.properties
     ```
-4. Open another terminal and start Kafka broker on port 9093:
+5. Open another terminal and start Kafka broker on port 9093:
     ```bash
     bin/kafka-server-start.sh config/server-9093.properties
     ```
@@ -126,6 +146,4 @@ To start the simulation, follow these steps:
     - Additional users follow the same pattern.
 
 Ensure that all necessary services are running before accessing the dashboards.
-
-
 
