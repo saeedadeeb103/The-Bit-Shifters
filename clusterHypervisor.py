@@ -19,7 +19,7 @@ from clusterHypervisorUI import create_widgets, update_ui_availability
 class ClusterHypervisor:
     def __init__(self, root):
         self.root = root
-        self.root.title("Cluster Simulator UI")
+        self.root.title("Cluster Hypervisor")
         self.root.state('zoomed')
         self.root.rowconfigure(0, weight=1)
         self.root.columnconfigure(0, weight=1)
