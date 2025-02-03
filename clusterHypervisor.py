@@ -24,7 +24,7 @@ class ClusterHypervisor:
         self.root.rowconfigure(0, weight=1)
         self.root.columnconfigure(0, weight=1)
         
-        self.database = ClusterDatabase(bucket="redshift-downloads", file_path="redset/serverless/sample_0.01.parquet", db_type="duckdb")
+        self.database = ClusterDatabase(bucket="redshift-downloads", file_path="redset/serverless/full.parquet", db_type="duckdb")
         self.factory = ClusterFactory()
         self.cluster_data = self.get_cluster_data()
         self.sort_column = None

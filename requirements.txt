@@ -10,3 +10,10 @@ psycopg2-binary
 
 # Kafka Streaming
 confluent-kafka
+pandas
+numpy
+
+#
+flask
+flask-login
+werkzeug

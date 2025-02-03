@@ -38,8 +38,8 @@ def _get_user_data():
     return find_stable_queries_for_user(df)
 
 # initialize DuckDB
-conn = duckdb.connect(database=DUCKDB_PATH, read_only=False)
-conn_operator = duckdb.connect(database=OPERATOR_DUCKDB_PATH, read_only=False)
+conn = duckdb.connect(database=DUCKDB_PATH, read_only=True)
+conn_operator = duckdb.connect(database=OPERATOR_DUCKDB_PATH, read_only=True)
 
 # setup Flask-Login
 login_manager = LoginManager()
@@ -241,15 +241,15 @@ def compute_operator_metrics(operator_data):
 def calculate_correlation(x, y):
     """Calculate correlation safely, handling edge cases."""
     if len(x) < 2 or len(y) < 2:
-        return 0  # Not enough data for correlation
+        return 0  # not enough data for correlation
     x = x.dropna()
     y = y.dropna()
     if len(x) != len(y):
-        return 0  # Mismatched lengths
+        return 0  # mismatched lengths
     std_x = x.std()
     std_y = y.std()
     if std_x == 0 or std_y == 0:
-        return 0  # Avoid division by zero
+        return 0  # avoid division by zero
     return x.corr(y)
 
 from flask import session
@@ -276,43 +276,43 @@ def find_stable_queries_for_user(df_user: pd.DataFrame) -> pd.DataFrame:
     if df_user.empty or "feature_fingerprint" not in df_user.columns:
         return df_user
 
-    # Convert and sort timestamps
+    # convert and sort timestamps
     df_user["arrival_timestamp"] = pd.to_datetime(df_user["arrival_timestamp"], errors="coerce")
     df_user.sort_values("arrival_timestamp", inplace=True)
 
-    # Identify DML operations
+    # identify DML operations
     df_user["is_dml"] = df_user["query_type"].isin(DML_TYPES)
 
-    # Group by query fingerprints
+    # group by query fingerprints
     grouped = df_user.groupby("feature_fingerprint", dropna=True)
 
     for fingerprint, group_df in grouped:
-        # Skip groups with only DML operations
+        # Skip if only DML operations
         if group_df["is_dml"].all():
             continue
 
-        # Skip groups with less than 2 occurrences
+        # skip groups with less than 2 occurrences
         if len(group_df) < 2:
             continue
 
         first_time = group_df["arrival_timestamp"].iloc[0]
         last_time = group_df["arrival_timestamp"].iloc[-1]
 
-        # Get tables read by this query pattern
+        # get tables read by this query pattern
         read_tables = set()
         if "read_table_ids" in group_df.columns:
             for tables in group_df["read_table_ids"].dropna():
                 cleaned = [t.strip().replace("'", "") for t in str(tables).strip("[]").split(",")]
                 read_tables.update(cleaned)
 
-        # Find conflicting DML operations
+        # find conflicting DML operations
         dml_in_range = df_user[
             df_user["is_dml"] &
             (df_user["arrival_timestamp"] >= first_time) &
             (df_user["arrival_timestamp"] <= last_time)
         ]
 
-        # Check for table conflicts
+        # check for table conflicts
         conflict_found = False
         for _, dml_row in dml_in_range.iterrows():
             dml_tables = [t.strip().replace("'", "") 
@@ -321,7 +321,7 @@ def find_stable_queries_for_user(df_user: pd.DataFrame) -> pd.DataFrame:
                 conflict_found = True
                 break
 
-        # Mark stable queries if no conflicts found
+        # mark stable queries if no conflicts found
         if not conflict_found:
             stable_indices = group_df[~group_df["is_dml"]].index
             df_user.loc[stable_indices, "stable"] = True
@@ -372,110 +372,6 @@ def get_stable_data():
         print(f"❌ Error filtering stable queries: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-
-
-@app.route("/api/alerts")
-@login_required
-def get_degradation_alerts():
-    """Fetch performance degradation alerts for the logged-in user's stable queries."""
-    user_table = f"user_table_{current_user.id}"
-
-    tables = [t[0] for t in conn.execute("SHOW TABLES").fetchall()]
-    if user_table not in tables:
-        return jsonify([])
-
-    df_stable = conn.execute(f"SELECT * FROM {user_table}").fetchdf()
-    df_stable = find_stable_queries_for_user(df_stable)
-
-    return jsonify(check_performance_degradation(df_stable) if not df_stable.empty else [])
-
-
-# --------------------------------------------------------------------
-# 5. PERFORMANCE CHECK
-# --------------------------------------------------------------------
-def check_performance_degradation(df_stable: pd.DataFrame):
-    """Detects performance degradation using execution time trends."""
-    if df_stable.empty:
-        return []
-
-    df_stable["arrival_timestamp"] = pd.to_datetime(df_stable["arrival_timestamp"], errors="coerce")
-    latest_time = df_stable["arrival_timestamp"].max()
-
-    recent_start = latest_time - timedelta(hours=24)
-    historical_start = recent_start - timedelta(days=7)
-
-    alerts = []
-    grouped = df_stable.groupby("feature_fingerprint")
-
-    for fingerprint, group in grouped:
-        recent = group[group["arrival_timestamp"] >= recent_start]
-        historical = group[
-            (group["arrival_timestamp"] >= historical_start) & (group["arrival_timestamp"] < recent_start)
-        ]
-
-        if len(recent) < 5 or len(historical) < 20:
-            continue
-
-        hist_mean, hist_std = historical["execution_duration_ms"].mean(), historical["execution_duration_ms"].std()
-        recent_mean = recent["execution_duration_ms"].mean()
-
-        zscore = (recent_mean - hist_mean) / hist_std
-        if zscore > 2:
-            alerts.append({
-                "fingerprint": fingerprint,
-                "degradation_percentage": round((recent_mean - hist_mean) / hist_mean * 100, 2)
-            })
-
-    return alerts
-
-def setup_db():
-    """Loads data from Parquet and creates user-specific tables and operator_data table if they don't already exist."""
-    if not os.path.exists(DUCKDB_PATH):
-        logger.warning(f"DuckDB database file '{DUCKDB_PATH}' not found. Skipping setup.")
-        return
-
-    # Load customer data
-    if not os.path.exists(PARQUET_FILE):
-        logger.warning(f"Parquet file '{PARQUET_FILE}' not found. No customer data to load.")
-    else:
-        df_all = pd.read_parquet(PARQUET_FILE, engine="pyarrow")  # Ensure Parquet compatibility
-        if df_all.empty:
-            logger.warning("Customer Parquet file is empty, skipping table creation.")
-        else:
-            if "user_id" not in df_all.columns:
-                logger.warning("No 'user_id' column found in customer Parquet file.")
-            else:
-                # Fetch existing tables in the database
-                existing_tables = {t[0] for t in conn.execute("SHOW TABLES").fetchall()}
-
-                for uid in df_all["user_id"].dropna().unique():
-                    uid = int(uid)  # Convert numpy.int64 to Python int
-                    user_table = f"user_table_{uid}"
-
-                    if user_table in existing_tables:
-                        logger.info(f"Table '{user_table}' already exists. Skipping creation.")
-                        continue  # Skip if the table is already present
-
-                    conn.execute(f"CREATE TABLE {user_table} AS SELECT * FROM df_all WHERE user_id = {uid}")
-                    logger.info(f"Created table '{user_table}' for user_id {uid}")
-
-    # Load operator data
-    if not os.path.exists(OPERATOR_PARQUET_FILE):
-        logger.warning(f"Parquet file '{OPERATOR_PARQUET_FILE}' not found. No operator data to load.")
-    else:
-        df_operator = pd.read_parquet(OPERATOR_PARQUET_FILE, engine="pyarrow")
-        if df_operator.empty:
-            logger.warning("Operator Parquet file is empty, skipping table creation.")
-        else:
-            # Re-fetch existing tables to include any new ones created above (optional, based on needs)
-            existing_tables = {t[0] for t in conn.execute("SHOW TABLES").fetchall()}
-            operator_table = "operator_data"
-            
-            if operator_table in existing_tables:
-                logger.info(f"Table '{operator_table}' already exists. Skipping creation.")
-            else:
-                conn.execute(f"CREATE TABLE {operator_table} AS SELECT * FROM df_operator")
-                logger.info(f"Created table '{operator_table}'")
 
 
 # --------------------------------------------------------------------

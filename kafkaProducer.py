@@ -9,7 +9,7 @@ class KafkaProducer:
         self.bootstrap_servers = bootstrap_servers
         self.producer = Producer({
             'bootstrap.servers': self.bootstrap_servers,
-            'compression.type': 'gzip'  # Enable Gzip compression
+            'compression.type': 'lz4'  # Enable lz4 compression
         })
         print(f"Initializing Kafka producer for cluster '{self.name}' with server '{self.bootstrap_servers}' ...")
 
