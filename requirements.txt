@@ -1,0 +1,12 @@
+# S3 and Data Handling
+s3fs
+pyarrow
+duckdb
+pandas
+sqlalchemy
+
+# PostgreSQL Support
+psycopg2-binary
+
+# Kafka Streaming
+confluent-kafka

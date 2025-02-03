@@ -1,0 +1,40 @@
++--------------------------------------------------+
+|               RedsetDownloader                   |
++--------------------------------------------------+
+| - s3_bucket: str                                 |
+| - file_path: str                                 |
+| - local_parquet_path: str                        |
+| - database_type: str                             |
+| - cluster_dfs: dict                              |
++--------------------------------------------------+
+| + __init__(bucket: str, file: str, db: str)      |
+| + download_from_s3()                             |
+| + extract_cluster_logs(cluster_id: str) -> df    |
+| + store_to_parquet(df, cluster_id: str)          |
+| + store_to_duckdb(df, cluster_id: str)           |
+| + store_to_postgres(df, cluster_id: str)         |
+| + setup_database()                               |
++--------------------------------------------------+
+
++--------------------------------------------------+
+|               ClusterSimulator                   |
++--------------------------------------------------+
+| - cluster_id: str                                |
+| - data_source: str                               |
+| - kafka_producer: KafkaProducer                  |
++--------------------------------------------------+
+| + __init__(cluster_id: str, data_source: str)    |
+| + load_data() -> df                              |
+| + send_to_stream()                               |
++--------------------------------------------------+
+
++--------------------------------------------------+
+|                 ClusterFactory                   |
++--------------------------------------------------+
+| - clusters: dict                                 |
++--------------------------------------------------+
+| + create_cluster(cluster_id: str)                |
+| + start_clusters(cluster_ids: list)              |
+| + stop_cluster(cluster_id: str)                  |
+| + stop_all_clusters()                            |
++--------------------------------------------------+
