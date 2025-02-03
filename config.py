@@ -15,7 +15,7 @@ class StorageSettings:
 class HypervisorSettings:
     """Settings for the hypervisor."""
     DATA_UPDATE_FREQUENCY = 1 # Frequency in Hertz
-    MAX_CLUSTER_COUNT = 10
+    MAX_CLUSTER_COUNT = 100
 
 class SimulationSettings:
     """Simulation settings for the project."""
@@ -29,7 +29,7 @@ class KafkaSettings:
     """Settings for Kafka."""
     OPERATOR_BOOTSTRAP_SERVERS = "localhost:9092"
     OPERATOR_TOPIC = "operator_data"
-    OPERATOR_COLUMNS = ['cluster_size', 'database_id', 'arrival_timestamp', 'compile_duration_ms', 'execution_duration_ms', 'was_cached']
+    OPERATOR_COLUMNS = ['instance_id', 'cluster_size', 'database_id', 'arrival_timestamp', 'compile_duration_ms', 'execution_duration_ms', 'was_cached']
     USER_BOOTSTRAP_SERVERS = "localhost:9093"
     USER_TOPIC = "user_data"
-    USER_COLUMNS = ['database_id', 'query_id', 'arrival_timestamp', 'feature_fingerprint', 'query_type']
+    USER_COLUMNS = ['instance_id', 'database_id', 'query_id', 'arrival_timestamp', 'feature_fingerprint', 'query_type']

@@ -74,7 +74,7 @@ class ClusterDatabase:
 
             for instance_id, df in cluster_dfs.items():
                 if df is not None:
-                    df = df.drop(columns=["instance_id"], errors="ignore")
+                    # df = df.drop(columns=["instance_id"], errors="ignore")
                     table_name = f"logs_instance_{instance_id}"
 
                     # Register DataFrame to DuckDB
