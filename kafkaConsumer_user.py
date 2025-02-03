@@ -78,7 +78,11 @@ class KafkaConsumer:
 
             # Convert data to DataFrame
             df = pd.DataFrame([data])
-
+            
+            if "read_table_ids" in df.columns:
+                df["read_table_ids"] = df["read_table_ids"].astype(str)
+            if "write_table_ids" in df.columns:
+                df["write_table_ids"] = df["write_table_ids"].astype(str)
             # Connect to DuckDB
             con = duckdb.connect(db_path)
 

@@ -18,7 +18,7 @@ class StorageSettings:
 class HypervisorSettings:
     """Settings for the hypervisor."""
     DATA_UPDATE_FREQUENCY = 1 # Frequency in Hertz
-    MAX_CLUSTER_COUNT = 10
+    MAX_CLUSTER_COUNT = 100
 
 class SimulationSettings:
     """Simulation settings for the project."""
@@ -26,13 +26,16 @@ class SimulationSettings:
     SIMULATION_UPDATE_FREQUENCY = 1 # Frequency in which the simulation is updated
     SIMULATION_DURATION = 600  # Time in seconds
     SIMULATION_STEP = 60  # Time in seconds
-    MAX_BATCH_SIZE = 10  # Maximum number of rows per batch
+    MAX_BATCH_SIZE = 1000  # Maximum number of rows per batch
 
 class KafkaSettings:
     """Settings for Kafka."""
     OPERATOR_BOOTSTRAP_SERVERS = "localhost:9092"
     OPERATOR_TOPIC = "operator_data"
-    OPERATOR_COLUMNS = ['cluster_size', 'database_id', 'arrival_timestamp', 'compile_duration_ms', 'queue_duration_ms', 'execution_duration_ms','feature_fingerprint', 'was_cached', 'query_type', 'mbytes_scanned', 'mbytes_spilled']
+    OPERATOR_COLUMNS = ['instance_id', 'query_id', 'cluster_size', 'database_id',
+       'arrival_timestamp', 'compile_duration_ms', 'queue_duration_ms',
+       'execution_duration_ms', 'feature_fingerprint', 'was_cached',
+       'query_type', 'mbytes_scanned', 'mbytes_spilled']
     USER_BOOTSTRAP_SERVERS = "localhost:9093"
     USER_TOPIC = "user_data"
     USER_COLUMNS = ['user_id','database_id', 'query_id', 'arrival_timestamp', 'compile_duration_ms', 'queue_duration_ms', 'execution_duration_ms', 'feature_fingerprint', 'was_aborted', 'was_cached', 'query_type', 'num_permanent_tables_accessed', 'num_external_tables_accessed', 'num_system_tables_accessed', 'read_table_ids', 'write_table_ids']

@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------------------
 # 1. CONFIG & GLOBALS
 # --------------------------------------------------------------------
-DUCKDB_PATH = "database/user_cluster.duckdb"  # Persistent database file
-OPERATOR_DUCKDB_PATH = "database/operator_cluster.duckdb"
+DUCKDB_PATH = "databases/user_cluster.duckdb"  # Persistent database file
+OPERATOR_DUCKDB_PATH = "databases/operator_cluster.duckdb"
 PARQUET_FILE = "customer_data_last_7_days.parquet"
 OPERATOR_PARQUET_FILE = "operator_data_last_7_days.parquet"
 DML_TYPES = ['INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP']
@@ -142,7 +142,7 @@ def compute_operator_metrics(operator_data):
         operator_data["arrival_timestamp"] = pd.to_datetime(
             operator_data["arrival_timestamp"], 
             errors="coerce",
-            format="%Y-%m-%d %H:%M:%S"
+            format="ISO8601" 
         )
         operator_data = operator_data.dropna(subset=["arrival_timestamp"])
         operator_data["hour_bin"] = operator_data["arrival_timestamp"].dt.floor('h')
