@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operator Dashboard</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    
+    <!-- Chart.js and Required Plugins -->
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2"></script>
+        
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+</head>
+<body>
+  <div class="sidebar" id="mySidebar">
+    <button class="toggle-btn" onclick="toggleSidebar()">&#9776;</button>
+
+    <div class="nav-panel">
+      <h3 style="margin-top: 30px;">PAGE NAVIGATION</h3>
+      <ul class="nav-links">
+        <li onclick="window.location.href='/'">Dashboard</li>
+      </ul>
+
+      <button class="logout-button" onclick="window.location.href='/logout'">Logout</button>
+    </div>
+
+    <div class="sidebar-icons">
+      <div class="icon-circle">i</div>
+      <div class="icon-circle">?</div>
+    </div>
+  </div>
+
+  <button class="collapse-arrow" onclick="toggleSidebar()">&larr;</button>
+
+    <div class="main-content">
+        <div class="container-fluid">
+            <h1 class="text-center my-4">Operator Dashboard</h1>
+
+            <!-- KPI Cards for Operator Metrics -->
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card kpi-card">
+                        <div class="card-body">
+                            <h5 class="card-title">Total Instances</h5>
+                            <p class="card-value" id="totalInstances">0</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card kpi-card">
+                        <div class="card-body">
+                            <h5 class="card-title">Avg Idle Time</h5>
+                            <p class="card-value" id="avgIdleTime">0s</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card kpi-card">
+                        <div class="card-body">
+                            <h5 class="card-title">Oversubscribed Hours</h5>
+                            <p class="card-value" id="totalOversubscribed">0</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Operator Metrics Charts -->
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Idle Time per Instance</h5>
+                            <div class="chart-container" style="height: 300px;">
+                                <canvas id="idleTimeChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Query Concurrency</h5>
+                            <div class="chart-container" style="height: 300px;">
+                                <canvas id="concurrencyChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Cluster Utilization Heatmap</h5>
+                            <div class="chart-container" style="height: 300px;">
+                                <canvas id="utilizationHeatmap"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Concurrency Slowdowns</h5>
+                            <div class="chart-container" style="height: 300px;">
+                                <canvas id="slowdownsChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.1.0/dist/chartjs-chart-matrix.min.js"></script>
+    <script>
+        let sidebarToggleTimeout;
+        function toggleSidebar() {
+          clearTimeout(sidebarToggleTimeout);
+          const sidebar = document.getElementById("mySidebar");
+          sidebarToggleTimeout = setTimeout(() => {
+            sidebar.classList.toggle("expanded");
+          }, 50);
+        }
+        // Global metrics data
+        const metrics = {{ metrics | tojson }};
+        let chartInstances = {};
+
+        function safeGetMetric(metricPath, defaultValue = {}) {
+            const path = metricPath.split('.');
+            return path.reduce((obj, key) => (obj && obj[key] !== undefined) ? obj[key] : defaultValue, metrics);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!metrics) {
+                console.error('No metrics data available');
+                return;
+            }
+
+            updateOperatorKPIs();
+            initializeCharts();
+        });
+
+        function updateOperatorKPIs() {
+            // total Instances
+            const instances = Object.keys(metrics.idle_time_per_instance).length;
+            document.getElementById('totalInstances').textContent = instances;
+
+            // average Idle Time
+            const idleTimes = Object.values(metrics.idle_time_per_instance);
+            const avgIdle = idleTimes.reduce((a, b) => a + b, 0) / idleTimes.length;
+            document.getElementById('avgIdleTime').textContent = `${avgIdle.toFixed(1)}s`;
+
+            // total Oversubscribed Hours
+            const oversubscribed = Object.values(metrics.oversubscribed_hours).reduce((a, b) => a + b, 0);
+            document.getElementById('totalOversubscribed').textContent = oversubscribed;
+        }
+
+        function initializeCharts() {
+          try {
+              // destroy existing charts
+              Object.values(chartInstances).forEach(chart => chart.destroy());
+              chartInstances = {};
+
+              // idle Time Chart
+              chartInstances.idleTime = createChart(
+                  'idleTimeChart',
+                  'bar',
+                  Object.keys(safeGetMetric('idle_time_per_instance')),
+                  Object.values(safeGetMetric('idle_time_per_instance')),
+                  'Idle Time (seconds)',
+                  'rgba(75, 192, 192, 0.6)'
+              );
+
+              // concurrency Chart
+              chartInstances.concurrency = createChart(
+                  'concurrencyChart',
+                  'line',
+                  Object.keys(safeGetMetric('total_concurrency_per_instance')),
+                  Object.values(safeGetMetric('total_concurrency_per_instance')),
+                  'Total Concurrency',
+                  'rgba(153, 102, 255, 0.6)'
+              );
+
+              // cluster Utilization Chart (Bi Chart)
+              
+              // slowdowns Chart
+              chartInstances.slowdowns = createChart(
+                  'slowdownsChart',
+                  'bar',
+                  Object.keys(safeGetMetric('slowdowns_due_to_concurrency')),
+                  Object.values(safeGetMetric('slowdowns_due_to_concurrency')),
+                  'Execution Time Correlation',
+                  'rgba(255, 159, 64, 0.6)'
+              );
+                chartInstances.utilizationHeatmap = createHeatmap(
+                    'utilizationHeatmap',
+                    safeGetMetric('utilization_over_time', {})
+                );
+
+          } catch (error) {
+              console.error('Chart initialization error:', error);
+              showErrorNotification('Failed to initialize charts. Please try refreshing.');
+          }
+      }
+
+      function showErrorNotification(message) {
+          const notification = document.createElement('div');
+          notification.className = 'alert alert-danger';
+          notification.style.position = 'fixed';
+          notification.style.top = '20px';
+          notification.style.right = '20px';
+          notification.textContent = message;
+          document.body.appendChild(notification);
+          setTimeout(() => notification.remove(), 5000);
+      }
+
+
+    function createBiChart(canvasId, labels, data) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        return new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Utilization %',
+                    data: data,
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1,
+                    barPercentage: 0.8,
+                    categoryPercentage: 0.9
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                scales: {
+                    x: {
+                        max: 100,
+                        title: { 
+                            display: true, 
+                            text: 'Utilization Percentage' 
+                        }
+                    },
+                    y: {
+                        grid: { display: false },
+                        title: {
+                            display: true,
+                            text: 'Instances'
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => 
+                                `${context.dataset.label}: ${context.raw}%`
+                        }
+                    },
+                    legend: { display: false }
+                }
+            }
+        });
+    }
+    
+    Chart.register(window['chartjs-chart-matrix'].MatrixController);
+
+    function createHeatmap(canvasId, data) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+
+        // handle empty data
+        if (!data || Object.keys(data).length === 0) {
+            console.warn('No data available for heatmap');
+            return new Chart(ctx, { type: 'bar' });
+        }
+
+        // convert timestamps & extract cluster IDs
+        const timestamps = Object.keys(data).map(ts => parseInt(ts) * 1000); // convert seconds to milliseconds
+        const clusters = [...new Set(Object.values(data).flatMap(clusters => Object.keys(clusters)))].sort();
+
+        // extract all utilization values
+        const allValues = Object.values(data).flatMap(clusters => Object.values(clusters));
+        const maxUtilization = Math.max(...allValues, 100); // Ensure meaningful max
+
+        // prepare data with better scaling
+        const dataset = {
+            label: 'Cluster Utilization (%)',
+            data: [],
+            backgroundColor: (ctx) => {
+                const value = ctx.dataset.data[ctx.dataIndex].v;
+                if (value === 0) return 'rgba(255,255,255,0.1)'; 
+                const intensity = Math.min(1, value / maxUtilization); 
+                return `rgba(0, 100, 255, ${intensity + 0.2})`; 
+            },
+            borderColor: 'rgba(0,0,0,0.1)',
+            borderWidth: 0.5,
+            width: (ctx) => {
+                const a = ctx.chart.chartArea || {};
+                return (a.right - a.left) / timestamps.length - 1;
+            },
+            height: (ctx) => {
+                const a = ctx.chart.chartArea || {};
+                return (a.bottom - a.top) / clusters.length - 1;
+            }
+        };
+
+        // populate heatmap data (Ensure missing timestamps are included)
+        const timeRange = Array.from(new Set(timestamps.sort((a, b) => a - b))); // sorted time bins
+        timeRange.forEach(ts => {
+            clusters.forEach(cluster => {
+                dataset.data.push({
+                    x: new Date(ts),
+                    y: cluster,
+                    v: data[ts / 1000]?.[cluster] || 0
+                });
+            });
+        });
+
+        return new Chart(ctx, {
+            type: 'matrix',
+            data: { datasets: [dataset] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'hour',
+                            tooltipFormat: 'MMM d, yyyy HH:mm',
+                            displayFormats: { hour: 'HH:mm' }
+                        },
+                        title: { display: true, text: 'Time' },
+                        grid: { display: false }
+                    },
+                    y: {
+                        type: 'category',
+                        labels: clusters,
+                        title: { display: true, text: 'Cluster ID' },
+                        grid: { display: true }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            title: ctx => new Date(ctx[0].raw.x).toLocaleString(),
+                            label: ctx => `Cluster ${ctx.raw.y}: ${ctx.raw.v.toFixed(1)}%`
+                        }
+                    },
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    }
+
+     // building chart function
+      function createChart(canvasId, type, labels, data, label, color, isTimeSeries = false) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        return new Chart(ctx, {
+            type: type,
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: label,
+                    data: data,
+                    backgroundColor: color,
+                    borderColor: color.replace('0.6', '1'),
+                    borderWidth: 1,
+                    fill: type === 'line' ? false : true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true },
+                    x: isTimeSeries ? {
+                        type: 'time',
+                        time: {
+                            parser: 'T',
+                            unit: 'hour',
+                            tooltipFormat: 'MMM d, yyyy HH:mm',
+                            displayFormats: {
+                                hour: 'MMM d HH:mm'
+                            }
+                        }
+                    } : {}
+                },
+                plugins: {
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    }
+                }
+            }
+        });
+    }
+    
+      // handle window resize
+      window.addEventListener('resize', () => {
+          Object.values(chartInstances).forEach(chart => chart.resize());
+      });
+    </script>
+</body>
+</html>

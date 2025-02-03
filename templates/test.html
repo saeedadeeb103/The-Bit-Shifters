@@ -14,30 +14,39 @@
   />
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Optionally, link your own CSS -->
   <link
     rel="stylesheet"
     href="{{ url_for('static', filename='style.css') }}"
   />
 </head>
 <body>
-
+  <!-- SIDEBAR (NAVY) -->
   <div class="sidebar" id="mySidebar">
+    <!-- Hamburger icon (top) -->
     <button class="toggle-btn" onclick="toggleSidebar()">&#9776;</button>
+
+    <!-- The gold sliding panel (hidden when collapsed) -->
     <div class="nav-panel">
       <h3 style="margin-top: 30px;">PAGE NAVIGATION</h3>
       <ul class="nav-links">
         <li onclick="window.location.href='/'">Dashboard</li>
       </ul>
+
       <button class="logout-button" onclick="window.location.href='/logout'">Logout</button>
     </div>
+
+    <!-- Icons at bottom of navy bar -->
     <div class="sidebar-icons">
       <div class="icon-circle">i</div>
       <div class="icon-circle">?</div>
     </div>
   </div>
 
+  <!-- Collapse arrow button -->
   <button class="collapse-arrow" onclick="toggleSidebar()">&larr;</button>
 
+  <!-- MAIN CONTENT -->
   <div class="main-content">
     <div class="container-fluid">
       <div class="row mb-4">
@@ -45,6 +54,10 @@
           <h1 class="text-center my-4">Customer Dashboard</h1>
         </div>
       </div>
+
+
+
+      <!-- KPI CARDS -->
       <div class="row">
         <div class="col-md-4">
           <div class="card kpi-card">
@@ -118,9 +131,23 @@
         </div>
       </div>
 
-    </div> 
-  </div>   
+      <!-- Alerts Chart -->
+      <!-- <div class="row">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Performance Degradation Alerts</h5>
+              <div class="chart-container" style="height: 300px;">
+                <canvas id="degradationChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div> -->
+    </div> <!-- end container-fluid -->
+  </div>   <!-- end main-content -->
 
+  <!-- SCRIPTS -->
   <script>
     // --------------------------------------------
     // SIDEBAR TOGGLE
@@ -143,7 +170,9 @@
     let queryFailuresChartInstance = null;
     let degradationChartInstance = null;
 
-
+    // --------------------------------------------
+    // ON PAGE LOAD
+    // --------------------------------------------
     document.addEventListener('DOMContentLoaded', async function () {
       try {
         const authCheck = await fetch('/api/check-auth');
@@ -161,10 +190,13 @@
     });
 
 
+    // --------------------------------------------
+    // IMPROVED FETCH WITH BETTER ERROR HANDLING
+    // --------------------------------------------
     async function fetchWithAuth(url) {
       try {
         const resp = await fetch(url);
-        if (resp.status === 401) {  // User is not authenticated
+        if (resp.status === 401) {  // 🔥 User is not authenticated
           window.location.href = "/login";
           return;
         }
@@ -176,13 +208,13 @@
         return await resp.json();
       } catch (err) {
         console.error("Fetch error:", err);
-        window.location.href = "/login";
+        window.location.href = "/login";  // Redirect to login on any fetch failure
       }
     }
 
 
     // --------------------------------------------
-    // initialize dashboard
+    // INITIALIZE DASHBOARD
     // --------------------------------------------
     async function initializeDashboard() {
       try {
@@ -194,10 +226,11 @@
     }
 
     // --------------------------------------------
-    // update dashboard function
+    // UPDATED DASHBOARD FUNCTION
     // --------------------------------------------
     async function updateDashboard() {
       try {
+        // Removed queryType filter logic
         const dashboardData = await fetchWithAuth('/api/user-data');
         
         if (!dashboardData || !dashboardData.data) {
@@ -205,6 +238,7 @@
           return;
         }
 
+        // Use all data without filtering
         const filteredData = dashboardData.data;
         const stableData = filteredData.filter(item => item.stable === true);
 
@@ -218,13 +252,18 @@
         const failuresObj = calculateQueryFailures(filteredData);
         updateQueryFailuresChart(failuresObj);
 
+        // await fetchDegradationAlerts();
+
       } catch (err) {
         console.error("Dashboard update error:", err);
       }
     }
 
+    // --------------------------------------------
+    // UTILITY FUNCTIONS
+    // --------------------------------------------
     function clearCharts() {
-      // reset chart visualizations
+      // Implementation to reset chart visualizations
       [executionTimeChartInstance, stableQueryPerformanceChartInstance, 
       queryThroughputChartInstance, queryFailuresChartInstance,
       degradationChartInstance].forEach(chart => {
@@ -232,10 +271,32 @@
       });
     }
 
+    async function populateUserIds() {
+      try {
+        const userList = await fetchWithAuth('/api/user-ids');
+        const userIdDropdown = document.getElementById('userIdFilter');
+        
+        // Clear existing options
+        userIdDropdown.innerHTML = '';
+        
+        // Add new options
+        userList.forEach(uid => {
+          const option = document.createElement('option');
+          option.value = uid;
+          option.textContent = uid;
+          userIdDropdown.appendChild(option);
+        });
+      } catch (err) {
+        console.error("Error populating user IDs:", err);
+        throw err;
+      }
+    }
     // --------------------------------------------
-    // KPI cards
+    // KPI CARDS
     // --------------------------------------------
     function updateKPIs(data, stableData) {
+      // console.log("📌 Data received in updateKPIs:", { totalData: data, stableQueries: stableData });
+
       const totalQueriesElem = document.getElementById('totalQueries');
       const stableQueriesElem = document.getElementById('stableQueries');
       const abortedQueriesElem = document.getElementById('abortedQueries');
@@ -250,6 +311,8 @@
       const totalQueries = data.length;
       const stableQueries = stableData ? stableData.length : 0;
       const abortedQueries = data.filter(row => row.was_aborted).length;
+
+      // console.log(`✅ Stable Queries Count: ${stableQueries}`); // Debugging output
 
       totalQueriesElem.textContent = totalQueries;
       stableQueriesElem.textContent = stableQueries;
@@ -275,17 +338,17 @@
         hideNoDataMessage(canvas);
       }
 
-      // group by day => average execution_duration_ms
+      // Group by day => average execution_duration_ms
       const dateMap = {};
       data.forEach(row => {
         const ts = new Date(row.arrival_timestamp);
         if (isNaN(ts.getTime())) return;
         
-        const dateStr = ts.toISOString().slice(0, 10); 
+        const dateStr = ts.toISOString().slice(0, 10); // YYYY-MM-DD
         if (!dateMap[dateStr]) dateMap[dateStr] = { total: 0, count: 0 };
 
         const execTime = parseFloat(row.execution_duration_ms);
-        if (!isNaN(execTime)) {  
+        if (!isNaN(execTime)) {  // ✅ Prevent NaN errors
           dateMap[dateStr].total += execTime;
           dateMap[dateStr].count += 1;
         }
@@ -316,7 +379,7 @@
       });
     }
 
-    // function to show "No data" message on dashboard
+    // Utility to show "No data" message on canvas
     function showNoDataMessage(canvas, message) {
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -339,10 +402,12 @@
       const canvas = document.getElementById('stableQueryPerformanceChart');
       const ctx = canvas.getContext('2d');
 
+      // Destroy existing chart
       if (stableQueryPerformanceChartInstance) {
         stableQueryPerformanceChartInstance.destroy();
       }
 
+      // Handle empty data
       if (!data || data.length === 0) {
         showNoDataMessage(canvas, "No stable queries to display");
         return;
@@ -350,6 +415,7 @@
         hideNoDataMessage(canvas);
       }
 
+      // Enhanced data processing
       const fpMap = {};
       data.forEach(row => {
         const fp = row.feature_fingerprint || 'Unknown';
@@ -357,7 +423,7 @@
         
         if (!fpMap[fp]) {
           fpMap[fp] = {
-            durations: [],     
+            durations: [],       // Store all durations for stats
             count: 0,
             total: 0,
             max: -Infinity,
@@ -372,6 +438,7 @@
         fpMap[fp].min = Math.min(fpMap[fp].min, duration);
       });
 
+      // Calculate statistics
       const labels = Object.keys(fpMap);
       const chartData = labels.map(fp => {
         const stats = fpMap[fp];
@@ -386,6 +453,7 @@
         };
       });
 
+      // Helper functions
       function calculateMedian(values) {
         const sorted = [...values].sort((a, b) => a - b);
         const mid = Math.floor(sorted.length / 2);
@@ -397,8 +465,9 @@
         return Math.sqrt(values.map(v => Math.pow(v - avg, 2)).reduce((a,b) => a + b, 0) / values.length);
       }
 
+      // Create chart with enhanced diagnostics
       stableQueryPerformanceChartInstance = new Chart(ctx, {
-        type: 'bar',
+        type: 'bar', // Better for comparing individual queries
         data: {
           labels,
           datasets: [{
@@ -406,11 +475,13 @@
             data: chartData.map(d => d.avg),
             backgroundColor: 'rgba(40, 167, 69, 0.5)',
             borderColor: '#28a745',
-            borderWidth: 2, 
-            hoverBackgroundColor: 'rgba(40, 167, 69, 0.8)', 
-            barThickness: 20, 
-            categoryPercentage: 0.8,
-            barPercentage: 0.9, 
+            borderWidth: 2, // Add border width
+            hoverBackgroundColor: 'rgba(40, 167, 69, 0.8)', // Optional hover effect
+            // Choose one of these options for bar thickness:
+            barThickness: 20, // Fixed pixel width
+            // OR use percentage-based sizing:
+            categoryPercentage: 0.8, // 
+            barPercentage: 0.9, // 
           }]
         },
         options: {
@@ -424,7 +495,7 @@
                   return label.length > 15 ? label.substring(0, 12) + '...' : label;
                 },
                 grid: {
-                    offset: true
+                    offset: true // Adds spacing at both ends
                 }
               }
             },
@@ -455,7 +526,7 @@
               annotations: {
                 performanceThreshold: {
                   type: 'line',
-                  yMin: 1000, 
+                  yMin: 1000, // Set your performance threshold
                   yMax: 1000,
                   borderColor: 'red',
                   borderWidth: 4,
@@ -472,6 +543,7 @@
         }
       });
 
+      // Add click handler for drill-down
       canvas.onclick = (event) => {
         const activeElements = stableQueryPerformanceChartInstance.getElementsAtEventForMode(
           event, 'nearest', { intersect: true }, true
@@ -485,6 +557,7 @@
       };
     }
 
+    // Example diagnostic function
     function analyzeProblematicQuery(fingerprint, stats) {
       console.log(`Diagnostics for ${fingerprint}:`);
       console.log('Execution count:', stats.count);
@@ -496,6 +569,7 @@
         min: stats.min
       });
       
+      // Add your custom analysis logic here:
       if (stats.max > 3 * stats.avg) {
         console.warn('⚠️ Huge outliers detected - investigate sporadic slow executions');
       }
@@ -511,11 +585,12 @@
     // CHART: Query Throughput
     // --------------------------------------------
     function calculateQueryThroughput(data) {
+      // Group queries by hour => # of queries per hour
       const hourlyMap = {};
       data.forEach(row => {
         const ts = new Date(row.arrival_timestamp);
         if (isNaN(ts.getTime())) return;
-        const hourKey = ts.toISOString().slice(0, 13);
+        const hourKey = ts.toISOString().slice(0, 13); // e.g. 2024-05-10T09
         if (!hourlyMap[hourKey]) hourlyMap[hourKey] = 0;
         hourlyMap[hourKey]++;
       });
@@ -609,12 +684,12 @@
             y: { beginAtZero: true, title: { display: true, text: 'Failure Count' } },
             x: {
               ticks: {
-                autoSkip: true, 
-                maxRotation: 45,
+                autoSkip: true, // Ensures all labels are considered
+                maxRotation: 45, // Slight tilt for readability
                 minRotation: 0,
                 callback: function(value, index, values) {
                   const label = labels[index];
-                  return label.length > 10 ? label.substring(0, 10) + '...' : label;
+                  return label.length > 10 ? label.substring(0, 10) + '...' : label; // Truncate long labels
                 },
                 text: "Feature Fingerprint"
               }
@@ -624,7 +699,7 @@
             tooltip: {
               callbacks: {
                 title: function(tooltipItems) {
-                  return labels[tooltipItems[0].dataIndex];
+                  return labels[tooltipItems[0].dataIndex]; // Show full label on hover
                 }
               }
             }
@@ -633,7 +708,90 @@
       });
 
     }
-  
+    // --------------------------------------------
+    // ALERTS (Performance Degradation)
+    // --------------------------------------------
+   // --------------------------------------------
+  // ALERTS (Performance Degradation)
+  // --------------------------------------------
+  // async function fetchDegradationAlerts() {
+  //   try {
+  //     const resp = await fetch(`/api/alerts`); // ✅ Remove userId
+  //     if (!resp.ok) {
+  //       throw new Error(`HTTP error: ${resp.status}`);
+  //     }
+  //     let alerts = await resp.json();
+
+  //     // Filter out invalid values
+  //     alerts = alerts
+  //       .filter(a => a.degradation_percentage !== null && !isNaN(a.degradation_percentage))
+  //       .sort((a, b) => b.degradation_percentage - a.degradation_percentage);
+
+  //     displayAlerts(alerts);
+  //   } catch (err) {
+  //     console.error("Error fetching alerts:", err);
+  //   }
+  // }
+
+  // function displayAlerts(alerts) {
+  //   const canvas = document.getElementById('degradationChart');
+  //   const ctx = canvas.getContext('2d');
+
+  //   if (degradationChartInstance) {
+  //     degradationChartInstance.destroy();
+  //   }
+
+  //   if (!alerts || alerts.length === 0) {
+  //     showNoDataMessage(canvas, "No performance degradation detected");
+  //     return;
+  //   } else {
+  //     hideNoDataMessage(canvas);
+  //   }
+
+  //   // Prepare data for the chart
+  //   const labels = alerts.map(a => a.fingerprint || 'Unknown Query');
+  //   const dataValues = alerts.map(a => parseFloat(a.degradation_percentage));
+
+  //   degradationChartInstance = new Chart(ctx, {
+  //     type: 'bar',
+  //     data: {
+  //       labels,
+  //       datasets: [{
+  //         label: 'Performance Degradation (%)',
+  //         data: dataValues,
+  //         backgroundColor: dataValues.map(val => {
+  //           if (val >= 50) return '#dc3545';  // Red (Critical)
+  //           if (val >= 20) return '#ffc107';  // Yellow (Warning)
+  //           return '#28a745';                 // Green (Normal)
+  //         }),
+  //         borderWidth: 1
+  //       }]
+  //     },
+  //     options: {
+  //       responsive: true,
+  //       maintainAspectRatio: false,
+  //       indexAxis: 'y',
+  //       plugins: {
+  //         tooltip: {
+  //           callbacks: {
+  //             label: function (context) {
+  //               return ` Degradation: ${context.raw}%`;
+  //             }
+  //           }
+  //         }
+  //       },
+  //       scales: {
+  //         x: {
+  //           beginAtZero: true,
+  //           ticks: {
+  //             callback: (value) => `${value}%`
+  //           }, 
+            
+  //         }
+  //       }
+  //     }
+  //   });
+  // }
   </script>
 </body>
 </html>
