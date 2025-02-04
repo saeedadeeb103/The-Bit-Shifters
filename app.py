@@ -157,6 +157,7 @@ def compute_operator_metrics(operator_data):
 
         # use estimated values where cluster_size is NaN
         operator_data["effective_cluster_size"] = operator_data["cluster_size"].fillna(operator_data["estimated_cluster_size"])
+        operator_data["effective_cluster_size"] = operator_data["effective_cluster_size"].replace(0, np.nan).fillna(1)
 
         # avoid division by zero
         operator_data.loc[operator_data["effective_cluster_size"] == 0, "effective_cluster_size"] = np.nan
@@ -164,13 +165,14 @@ def compute_operator_metrics(operator_data):
         # compute per-instance metrics
         instance_metrics = operator_data.groupby("instance_id").agg(
             total_concurrency=("cluster_concurrency", "sum"),
-            utilization=("cluster_concurrency", lambda x: (x.mean() / operator_data.loc[x.index[0], "effective_cluster_size"]) * 100),
-            idle_time=("arrival_timestamp", lambda x: x.diff().fillna(pd.Timedelta(0)).mean().total_seconds())
+            utilization=("cluster_concurrency", lambda x: (x.mean() / operator_data.loc[x.index, "effective_cluster_size"].fillna(1).max()) * 100),
+            idle_time=("arrival_timestamp", lambda x: x.sort_values().diff().dropna().mean().total_seconds() if len(x) > 1 else 0)
         ).reset_index()
 
         metrics["total_concurrency_per_instance"] = instance_metrics.set_index("instance_id")["total_concurrency"].to_dict()
         metrics["instance_utilization"] = instance_metrics.set_index("instance_id")["utilization"].round(2).to_dict()
         metrics["idle_time_per_instance"] = instance_metrics.set_index("instance_id")["idle_time"].to_dict()
+
 
         # compute utilization over time
         utilization = operator_data.groupby("hour_bin").size().fillna(0)
@@ -371,8 +373,6 @@ def get_stable_data():
     except Exception as e:
         print(f"❌ Error filtering stable queries: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
-
 
 # --------------------------------------------------------------------
 # 6. MAIN
